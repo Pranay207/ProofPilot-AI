@@ -1,13 +1,18 @@
 import "dotenv/config";
 import crypto from "node:crypto";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import express from "express";
 import cors from "cors";
 import { SAMPLE_CASES } from "../src/lib/sampleData.js";
 import { EVIDENCE_LABELS, getRequired, scoreCase } from "../src/lib/ruleEngine.js";
 
 const app = express();
-const port = Number(process.env.API_PORT || 4000);
+const port = Number(process.env.PORT || process.env.API_PORT || 4000);
 const useDatabase = process.env.USE_DATABASE === "true";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const distDir = path.resolve(__dirname, "..", "dist");
 let prisma = null;
 let localCases = SAMPLE_CASES.map((item) => ({ ...item, id: item.case_id }));
 
@@ -564,6 +569,12 @@ app.post("/api/cases/:id/export", async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+});
+
+app.use(express.static(distDir));
+
+app.get(/.*/, (_req, res) => {
+  res.sendFile(path.join(distDir, "index.html"));
 });
 
 app.use((error, _req, res, _next) => {
