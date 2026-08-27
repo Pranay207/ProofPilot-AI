@@ -933,8 +933,8 @@ export default function Dashboard() {
               <h1 className="text-sm font-semibold text-slate-900 capitalize">{active.replace(/-/g, " ")}</h1>
             </div>
           </div>
-          <div className="text-xs text-slate-500 hidden sm:block">
-            Razorpay merchant | <span className="font-mono">{dataSource}</span>
+          <div className="text-xs font-medium text-slate-500 hidden sm:block">
+            Merchant Risk Workspace
           </div>
         </header>
 
