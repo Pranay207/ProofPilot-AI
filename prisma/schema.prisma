@@ -37,6 +37,45 @@ model Merchant {
   cases     Case[]
 }
 
+model PaymentSignal {
+  id                    String   @id @default(cuid())
+  provider              String   @default("razorpay")
+  providerPaymentId     String   @unique
+  orderId               String?
+  amountPaise           Int
+  currency              String   @default("INR")
+  status                String
+  method                String?
+  customerEmail         String?
+  customerContact       String?
+  captured              Boolean  @default(false)
+  providerCreatedAt     DateTime?
+  lastWebhookEvent      String
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([status])
+  @@index([orderId])
+}
+
+model WebhookEvent {
+  id                    String   @id @default(cuid())
+  provider              String   @default("razorpay")
+  event                 String
+  eventFingerprint      String   @unique
+  paymentId             String?
+  disputeId             String?
+  refundId              String?
+  createdCaseId         String?
+  status                String   @default("received")
+  payload               Json?
+  receivedAt            DateTime @default(now())
+
+  @@index([event])
+  @@index([paymentId])
+  @@index([disputeId])
+}
+
 model Case {
   id                    String            @id @default(cuid())
   caseId                String            @unique

@@ -1,6 +1,6 @@
 # ProofPilot Database Layer
 
-ProofPilot uses PostgreSQL for production architecture and local sample data for the frontend demo.
+ProofPilot uses PostgreSQL as the system of record for merchant risk cases, Razorpay webhook intake, payment signals, evidence, timeline events, and audit history.
 
 ## Why PostgreSQL
 
@@ -44,6 +44,8 @@ USE_DATABASE=true npm run dev:api
 ## Core Tables
 
 - `Merchant`
+- `PaymentSignal`
+- `WebhookEvent`
 - `Case`
 - `EvidenceItem`
 - `TimelineEvent`
@@ -51,6 +53,6 @@ USE_DATABASE=true npm run dev:api
 
 ## Correct Workflow
 
-Razorpay/payment event -> Case normalizer -> ML loss-risk detector -> Evidence verifier -> Missing proof radar -> Response packet generator -> Rule decision -> Human approval -> Export packet -> Audit log -> Metrics dashboard.
+Razorpay payment/refund webhook -> verified webhook intake -> payment signal store -> dispute webhook -> case normalizer -> ML loss-risk detector -> evidence verifier -> missing proof radar -> response packet generator -> rule decision -> human approval -> export packet -> audit log -> metrics dashboard.
 
 ProofPilot is scoped to one AI Risk Manager loss class: merchant dispute/chargeback loss caused by missing, late, or scattered evidence.

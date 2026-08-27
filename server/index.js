@@ -54,12 +54,31 @@ app.post("/api/webhooks/razorpay", express.raw({ type: "application/json" }), as
       return res.json({ ok: true, ignored: true, event: payload.event });
     }
 
+    const intake = await recordRazorpayWebhook(payload, req.body);
+    await upsertPaymentSignalFromWebhook(payload);
+
     if (payload.event !== "payment.dispute.created") {
-      return res.json({ ok: true, received: true, event: payload.event, created_case: false });
+      return res.json({
+        ok: true,
+        received: true,
+        event: payload.event,
+        stored_event: intake.stored,
+        payment_signal: intake.payment_id || null,
+        created_case: false,
+      });
     }
 
     const created = await createCaseFromRazorpayDispute(payload);
-    return res.json({ ok: true, received: true, event: payload.event, created_case: created.created, case_id: created.case_id });
+    await markWebhookCaseCreated(payload, req.body, created.case_id);
+    return res.json({
+      ok: true,
+      received: true,
+      event: payload.event,
+      stored_event: intake.stored,
+      payment_signal: intake.payment_id || null,
+      created_case: created.created,
+      case_id: created.case_id,
+    });
   } catch (error) {
     next(error);
   }
@@ -149,6 +168,100 @@ function addAudit(caseItem, actor, action, detail) {
       { timestamp: new Date().toISOString(), actor, action, detail },
     ],
   };
+}
+
+function getWebhookFingerprint(rawBody) {
+  return crypto.createHash("sha256").update(rawBody).digest("hex");
+}
+
+function getWebhookEntity(payload, key) {
+  return payload?.payload?.[key]?.entity || null;
+}
+
+function fromRazorpayTimestamp(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? new Date(numeric * 1000) : null;
+}
+
+function extractWebhookIds(payload) {
+  const payment = getWebhookEntity(payload, "payment") || {};
+  const dispute = getWebhookEntity(payload, "dispute") || {};
+  const refund = getWebhookEntity(payload, "refund") || {};
+  return {
+    paymentId: payment.id || dispute.payment_id || refund.payment_id || null,
+    disputeId: dispute.id || null,
+    refundId: refund.id || null,
+  };
+}
+
+async function recordRazorpayWebhook(payload, rawBody) {
+  const ids = extractWebhookIds(payload);
+  const db = await getPrisma();
+  if (!db) {
+    return { stored: false, mode: "memory", payment_id: ids.paymentId, dispute_id: ids.disputeId };
+  }
+
+  const eventFingerprint = getWebhookFingerprint(rawBody);
+  const existing = await db.webhookEvent.findUnique({ where: { eventFingerprint } });
+  if (existing) {
+    return {
+      stored: false,
+      duplicate: true,
+      payment_id: existing.paymentId,
+      dispute_id: existing.disputeId,
+      case_id: existing.createdCaseId,
+    };
+  }
+
+  const saved = await db.webhookEvent.create({
+    data: {
+      event: payload.event || "unknown",
+      eventFingerprint,
+      paymentId: ids.paymentId,
+      disputeId: ids.disputeId,
+      refundId: ids.refundId,
+      payload,
+    },
+  });
+
+  return { stored: true, payment_id: saved.paymentId, dispute_id: saved.disputeId };
+}
+
+async function markWebhookCaseCreated(payload, rawBody, caseId) {
+  const db = await getPrisma();
+  if (!db) return;
+  await db.webhookEvent.updateMany({
+    where: { eventFingerprint: getWebhookFingerprint(rawBody) },
+    data: { createdCaseId: caseId, status: "case_created" },
+  });
+}
+
+async function upsertPaymentSignalFromWebhook(payload) {
+  const payment = getWebhookEntity(payload, "payment");
+  if (!payment?.id) return null;
+
+  const signal = {
+    providerPaymentId: payment.id,
+    orderId: payment.order_id || null,
+    amountPaise: Number(payment.amount || 0),
+    currency: payment.currency || "INR",
+    status: payment.status || payload.event,
+    method: payment.method || null,
+    customerEmail: payment.email || null,
+    customerContact: payment.contact || null,
+    captured: Boolean(payment.captured || payment.status === "captured"),
+    providerCreatedAt: fromRazorpayTimestamp(payment.created_at),
+    lastWebhookEvent: payload.event || "razorpay.webhook",
+  };
+
+  const db = await getPrisma();
+  if (!db) return signal;
+
+  return db.paymentSignal.upsert({
+    where: { providerPaymentId: payment.id },
+    update: signal,
+    create: signal,
+  });
 }
 
 const DEFAULT_BY_TYPE = {

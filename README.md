@@ -13,7 +13,10 @@ Merchants often lose disputes even when they have a valid case because payment r
 ProofPilot turns a risky dispute into an evidence-ready, human-approved response packet.
 
 ```text
-Razorpay/payment signal
+Razorpay payment/refund webhook
+  -> verified event intake
+  -> payment signal store
+  -> dispute webhook
   -> ML loss-risk detector
   -> evidence verifier
   -> missing proof radar
@@ -48,8 +51,8 @@ The app displays the model card in the Metrics Dashboard. In production, the sam
 
 ## Integrations
 
-- PostgreSQL/Aiven for cases, evidence, timeline, and audit logs
-- Razorpay test-mode keys for payment/dispute API access
+- PostgreSQL case store for payment signals, webhook events, cases, evidence, timeline, and audit logs
+- Razorpay API keys for payment/dispute API access
 - Signature-protected Razorpay webhook receiver
 - Exportable dispute packet JSON
 
