@@ -1,0 +1,125 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DisputeType {
+  goods_not_received
+  refund_not_processed
+  duplicate_payment
+  unauthorized_transaction
+  product_not_as_described
+  cancelled_subscription
+}
+
+enum PacketStatus {
+  draft
+  approved
+  escalated
+  accepted
+}
+
+enum RecommendedAction {
+  contest
+  accept
+  escalate
+}
+
+model Merchant {
+  id        String   @id @default(cuid())
+  name      String
+  email     String?  @unique
+  createdAt DateTime @default(now())
+  cases     Case[]
+}
+
+model Case {
+  id                    String            @id @default(cuid())
+  caseId                String            @unique
+  merchantId            String
+  paymentId             String
+  orderId               String
+  disputeId             String            @unique
+  refundId              String?
+  arn                   String?
+  rrn                   String?
+  utr                   String?
+  customerName          String
+  customerEmail         String?
+  amountPaise           Int
+  currency              String            @default("INR")
+  paymentStatus         String
+  refundStatus          String
+  deliveryStatus        String
+  disputeType           DisputeType
+  disputeReason         String
+  riskScore             Int
+  readinessScore        Int
+  confidenceScore       Int
+  customerMessage       String
+  caseSummary           String
+  recommendedAction     RecommendedAction
+  actionReason          String
+  deadline              DateTime
+  owner                 String
+  team                  String
+  packetStatus          PacketStatus       @default(draft)
+  merchantResponseDraft String
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  merchant       Merchant        @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  evidenceItems  EvidenceItem[]
+  timelineEvents TimelineEvent[]
+  auditLogs      AuditLog[]
+
+  @@index([merchantId, packetStatus])
+  @@index([disputeType])
+  @@index([riskScore])
+}
+
+model EvidenceItem {
+  id         String   @id @default(cuid())
+  caseId     String
+  key        String
+  label      String
+  status     String
+  fileName   String?
+  attachedAt DateTime?
+  createdAt  DateTime @default(now())
+
+  case Case @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@unique([caseId, key])
+}
+
+model TimelineEvent {
+  id        String   @id @default(cuid())
+  caseId    String
+  event     String
+  timestamp DateTime
+  status    String
+  detail    String
+  createdAt DateTime @default(now())
+
+  case Case @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId, timestamp])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  caseId    String
+  timestamp DateTime @default(now())
+  actor     String
+  action    String
+  detail    String
+
+  case Case @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId, timestamp])
+}
