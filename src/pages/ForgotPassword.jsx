@@ -1,3 +1,3 @@
-﻿export default function ForgotPassword() {
-  return <div className="p-6 text-sm text-slate-600">Password reset is disabled in local demo mode.</div>;
+export default function ForgotPassword() {
+  return <div className="p-6 text-sm text-slate-600">Account recovery is handled through the merchant workspace administrator.</div>;
 }

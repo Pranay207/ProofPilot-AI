@@ -57,7 +57,7 @@ export default function HumanApproval({ caseItem, onApprove, onEscalate, onAccep
         </div>
         <div className="mt-3 flex items-start gap-2 text-xs text-slate-500 bg-blue-50 border border-blue-100 rounded-md p-3">
           <Lock className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
-          ProofPilot AI never auto-submits disputes. A human must approve, edit, escalate, or accept every packet.
+          Every response packet requires reviewer approval before external action.
         </div>
       </div>
 
@@ -141,7 +141,7 @@ export default function HumanApproval({ caseItem, onApprove, onEscalate, onAccep
         <div className="mt-3 grid gap-2 sm:grid-cols-3">
           <div className="rounded-md bg-slate-50 px-3 py-2">
             <div className="text-[10px] uppercase tracking-wide text-slate-400">External action</div>
-            <div className="mt-1 text-xs font-medium text-slate-800">Never automatic</div>
+            <div className="mt-1 text-xs font-medium text-slate-800">Reviewer approved</div>
           </div>
           <div className="rounded-md bg-slate-50 px-3 py-2">
             <div className="text-[10px] uppercase tracking-wide text-slate-400">Audit</div>

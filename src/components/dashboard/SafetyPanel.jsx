@@ -2,9 +2,9 @@ import React from "react";
 import { ShieldCheck, Ban, Lock, Gauge, ScrollText, Cog } from "lucide-react";
 
 const GUARDRAILS = [
-  { icon: Ban, label: "No refund promises", desc: "AI never promises refunds to customers." },
-  { icon: Lock, label: "No auto-submit", desc: "Disputes are never submitted automatically." },
-  { icon: ShieldCheck, label: "Human approval required", desc: "Every packet needs a human decision." },
+  { icon: Ban, label: "Refund-safe responses", desc: "Drafts avoid unsupported refund commitments." },
+  { icon: Lock, label: "Approval-controlled actions", desc: "External actions require reviewer sign-off." },
+  { icon: ShieldCheck, label: "Human review required", desc: "Every packet receives a final merchant decision." },
   { icon: Gauge, label: "Confidence score shown", desc: "Every recommendation carries a score." },
   { icon: ScrollText, label: "Audit trail maintained", desc: "All actions logged immutably." },
   { icon: Cog, label: "Rule engine controls final recommendation", desc: "AI assists; rules decide." },

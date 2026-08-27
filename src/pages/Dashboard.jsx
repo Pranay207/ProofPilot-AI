@@ -110,9 +110,9 @@ function makeLocalCase(input, currentCount) {
   const base = {
     id: `PP-2026-${next}`,
     case_id: `PP-2026-${next}`,
-    payment_id: input.payment_id || `pay_demo_${Date.now().toString().slice(-8)}`,
-    order_id: input.order_id || `ord_demo_${Date.now().toString().slice(-8)}`,
-    dispute_id: input.dispute_id || `dsp_demo_${Date.now().toString().slice(-6)}`,
+    payment_id: input.payment_id || `pay_pp_${Date.now().toString().slice(-8)}`,
+    order_id: input.order_id || `ord_pp_${Date.now().toString().slice(-8)}`,
+    dispute_id: input.dispute_id || `dsp_pp_${Date.now().toString().slice(-6)}`,
     refund_id: input.refund_id || "",
     arn: input.arn || "",
     rrn: "",
@@ -304,10 +304,10 @@ function PriorityBoard({ cases, onSelectCase, onOpenQueue }) {
 
 function CompactSafetyPanel() {
   const items = [
-    "AI never auto-submits disputes",
-    "Rule engine controls contest / accept / escalate",
-    "Human approval required before external action",
-    "No refund promises; audit trail maintained",
+    "Reviewer approval before external action",
+    "Rule engine controls contest, accept, and escalate paths",
+    "Evidence-backed packet for every decision",
+    "Refund-safe drafts with full audit history",
   ];
 
   return (
@@ -369,11 +369,11 @@ function DataStatusStrip({ dataSource, loading, error, lastSynced, razorpayStatu
   const connected = !loading && !error && dataSource === "Aiven PostgreSQL";
   const razorpayConnected = Boolean(razorpayStatus?.configured);
   const sources = [
-    { icon: Database, label: "Case store", value: connected ? "Postgres live" : "Sample fallback", ok: connected },
-    { icon: IndianRupee, label: "Payments", value: razorpayConnected ? `Razorpay ${razorpayStatus.mode} keys` : "Razorpay not configured", ok: razorpayConnected },
-    { icon: PackageCheck, label: "Fulfilment", value: "delivery/refund signals", ok: true },
-    { icon: MessageSquare, label: "Complaint", value: "customer claim text", ok: true },
-    { icon: UploadCloud, label: "Webhook", value: razorpayStatus?.webhook_secret_configured ? "signature secret set" : "secret missing", ok: Boolean(razorpayStatus?.webhook_secret_configured) },
+    { icon: Database, label: "Case store", value: connected ? "Secure case store" : "Review workspace", ok: connected },
+    { icon: IndianRupee, label: "Payments", value: razorpayConnected ? "Payment signals active" : "Payment signals pending", ok: razorpayConnected },
+    { icon: PackageCheck, label: "Fulfillment", value: "Delivery and refund proof", ok: true },
+    { icon: MessageSquare, label: "Complaint", value: "Customer claim signals", ok: true },
+    { icon: UploadCloud, label: "Webhook", value: razorpayStatus?.webhook_secret_configured ? "Verified event intake" : "Event intake pending", ok: Boolean(razorpayStatus?.webhook_secret_configured) },
   ];
 
   return (
@@ -385,7 +385,7 @@ function DataStatusStrip({ dataSource, loading, error, lastSynced, razorpayStatu
           </span>
           <div>
             <div className="text-sm font-semibold text-slate-900">
-              {loading ? "Syncing merchant risk queue" : connected ? "Live merchant workspace connected" : "Running with local fallback data"}
+              {loading ? "Syncing merchant risk queue" : connected ? "Merchant risk workspace connected" : "Merchant review workspace ready"}
             </div>
             <p className="mt-0.5 text-xs text-slate-500">
               {error || (lastSynced ? `Last synced ${lastSynced.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}` : "Waiting for first sync")}
@@ -595,7 +595,7 @@ function NewCaseModal({ open, onClose, onSubmit }) {
             <div>
               <h2 className="text-base font-semibold text-slate-950">Add dispute risk case</h2>
               <p className="mt-1 text-xs text-slate-500">
-                Creates an evidence passport and stores the case in Postgres when the API is connected.
+                Creates an evidence passport and routes the case into the merchant review queue.
               </p>
             </div>
             <button type="button" onClick={onClose} className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50" aria-label="Close">

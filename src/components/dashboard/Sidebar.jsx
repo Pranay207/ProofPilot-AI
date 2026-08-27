@@ -58,7 +58,7 @@ export default function Sidebar({ active, onSelect, open, onClose }) {
         </nav>
 
         <div className="px-4 py-3 border-t border-slate-800 text-[11px] text-slate-500 leading-relaxed">
-          Human-in-the-loop | AI never auto-submits. Rule-based decisions only.
+          Human-reviewed actions | Evidence-first decisions.
         </div>
       </aside>
     </>
