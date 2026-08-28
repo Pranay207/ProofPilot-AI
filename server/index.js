@@ -3,11 +3,11 @@ import crypto from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
-import cors from "cors";
 import { SAMPLE_CASES } from "../src/lib/sampleData.js";
 import { EVIDENCE_LABELS, getRequired, scoreCase } from "../src/lib/ruleEngine.js";
 
 const app = express();
+app.disable("x-powered-by");
 const port = Number(process.env.PORT || process.env.API_PORT || 4000);
 const useDatabase = process.env.USE_DATABASE === "true";
 const __filename = fileURLToPath(import.meta.url);
@@ -15,8 +15,6 @@ const __dirname = path.dirname(__filename);
 const distDir = path.resolve(__dirname, "..", "dist");
 let prisma = null;
 let localCases = SAMPLE_CASES.map((item) => ({ ...item, id: item.case_id }));
-
-app.use(cors());
 
 app.post("/api/webhooks/razorpay", express.raw({ type: "application/json" }), async (req, res, next) => {
   try {
@@ -577,6 +575,13 @@ app.get("/api/health", (_req, res) => {
   res.json({ ok: true, mode: useDatabase ? "postgres" : "local-sample-data" });
 });
 
+app.get("/api/webhooks/razorpay", (_req, res) => {
+  res.status(405).json({
+    error: "Method not allowed",
+    message: "This webhook endpoint accepts signed POST requests from Razorpay.",
+  });
+});
+
 app.get("/api/integrations/razorpay/status", (_req, res) => {
   const config = getRazorpayConfig();
   res.json({
@@ -714,6 +719,12 @@ app.post("/api/cases", async (req, res, next) => {
 app.patch("/api/cases/:id/evidence", async (req, res, next) => {
   try {
     const { evidenceKey, fileName } = req.body;
+    if (typeof evidenceKey !== "string" || !evidenceKey.trim()) {
+      return res.status(400).json({ error: "A valid evidenceKey is required" });
+    }
+    if (fileName !== undefined && typeof fileName !== "string") {
+      return res.status(400).json({ error: "fileName must be a string" });
+    }
     const db = await getPrisma();
     if (!db) {
       localCases = localCases.map((caseItem) => {
@@ -764,6 +775,12 @@ app.patch("/api/cases/:id/evidence", async (req, res, next) => {
 app.patch("/api/cases/:id/draft", async (req, res, next) => {
   try {
     const { draft } = req.body;
+    if (typeof draft !== "string" || !draft.trim()) {
+      return res.status(400).json({ error: "A non-empty response draft is required" });
+    }
+    if (draft.length > 10000) {
+      return res.status(400).json({ error: "Response draft must be 10,000 characters or fewer" });
+    }
     const db = await getPrisma();
     if (!db) {
       localCases = localCases.map((caseItem) => {
@@ -787,6 +804,10 @@ app.patch("/api/cases/:id/draft", async (req, res, next) => {
 app.patch("/api/cases/:id/decision", async (req, res, next) => {
   try {
     const { status } = req.body;
+    const allowedStatuses = new Set(["approved", "escalated", "accepted"]);
+    if (!allowedStatuses.has(status)) {
+      return res.status(400).json({ error: "Decision status must be approved, escalated, or accepted" });
+    }
     const db = await getPrisma();
     if (!db) {
       localCases = localCases.map((caseItem) => {
@@ -835,6 +856,10 @@ app.post("/api/cases/:id/export", async (req, res, next) => {
   }
 });
 
+app.use("/api", (_req, res) => {
+  res.status(404).json({ error: "API route not found" });
+});
+
 app.use(express.static(distDir));
 
 app.get(/.*/, (_req, res) => {
@@ -842,8 +867,12 @@ app.get(/.*/, (_req, res) => {
 });
 
 app.use((error, _req, res, _next) => {
-  console.error(error);
-  res.status(500).json({ error: "ProofPilot API error", detail: error.message });
+  const malformedJson = error instanceof SyntaxError && error.status === 400 && "body" in error;
+  const status = malformedJson ? 400 : Number(error.status || 500);
+  if (status >= 500) console.error(error);
+  const payload = { error: malformedJson ? "Invalid JSON request body" : "ProofPilot API error" };
+  if (status >= 500 && process.env.NODE_ENV !== "production") payload.detail = error.message;
+  res.status(status).json(payload);
 });
 
 app.listen(port, () => {

@@ -366,7 +366,7 @@ function TrackFitPanel() {
 }
 
 function DataStatusStrip({ dataSource, loading, error, lastSynced, razorpayStatus }) {
-  const connected = !loading && !error && dataSource === "Aiven PostgreSQL";
+  const connected = !loading && !error && dataSource === "secure case store";
   const razorpayConnected = Boolean(razorpayStatus?.configured);
   const sources = [
     { icon: Database, label: "Case store", value: connected ? "Secure case store" : "Review workspace", ok: connected },
@@ -702,7 +702,7 @@ export default function Dashboard() {
   const [attachments, setAttachments] = useState({});
   const [casePanelOpen, setCasePanelOpen] = useState(false);
   const [newCaseOpen, setNewCaseOpen] = useState(false);
-  const [dataSource, setDataSource] = useState("local sample data");
+  const [dataSource, setDataSource] = useState("sample workspace");
   const [dataLoading, setDataLoading] = useState(true);
   const [dataError, setDataError] = useState("");
   const [lastSynced, setLastSynced] = useState(null);
@@ -718,11 +718,11 @@ export default function Dashboard() {
         if (cancelled || !Array.isArray(rows)) return;
         setCases(rows.map((item) => ({ ...item, id: item.id || item.case_id })));
         setSelectedId((current) => current || rows[0]?.id || rows[0]?.case_id || null);
-        setDataSource("Aiven PostgreSQL");
+        setDataSource("secure case store");
         setLastSynced(new Date());
       })
       .catch(() => {
-        setDataSource("local sample data");
+        setDataSource("sample workspace");
         setDataError("API unavailable; showing bundled sample cases");
       })
       .finally(() => {
@@ -817,7 +817,7 @@ export default function Dashboard() {
       });
       if (res.ok) replaceCase(await res.json());
     } catch {
-      setDataSource("local sample data");
+      setDataSource("sample workspace");
     }
   };
 
@@ -841,7 +841,7 @@ export default function Dashboard() {
       });
       if (res.ok) replaceCase(await res.json());
     } catch {
-      setDataSource("local sample data");
+      setDataSource("sample workspace");
     }
   };
 
@@ -857,7 +857,7 @@ export default function Dashboard() {
       });
       if (res.ok) replaceCase(await res.json());
     } catch {
-      setDataSource("local sample data");
+      setDataSource("sample workspace");
     }
   };
 
@@ -872,7 +872,7 @@ export default function Dashboard() {
       });
       if (res.ok) replaceCase(await res.json());
     } catch {
-      setDataSource("local sample data");
+      setDataSource("sample workspace");
       setDataError("API unavailable; export recorded only in local session");
     }
   };
@@ -890,14 +890,14 @@ export default function Dashboard() {
       setSelectedId(created.id);
       setActive("risk-queue");
       setCasePanelOpen(true);
-      setDataSource("Aiven PostgreSQL");
+      setDataSource("secure case store");
     } catch {
       const created = makeLocalCase(input, cases.length);
       setCases((prev) => [created, ...prev]);
       setSelectedId(created.id);
       setActive("risk-queue");
       setCasePanelOpen(true);
-      setDataSource("local sample data");
+      setDataSource("sample workspace");
     }
   };
 
