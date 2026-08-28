@@ -4,7 +4,7 @@ import PaymentTimeline from "./PaymentTimeline";
 import MissingProofRadar from "./MissingProofRadar";
 import DisputePacket from "./DisputePacket";
 import HumanApproval from "./HumanApproval";
-import { CheckCircle2, ClipboardCheck, FileText, Radar, ShieldCheck, Sparkles, Target, UserCheck } from "lucide-react";
+import { CheckCircle2, ClipboardCheck, FileText, Radar, ShieldCheck, Sparkles, Target, Trash2, UserCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EVIDENCE_LABELS, getRequired, hasEvidence, riskTone, readinessTone, actionTone } from "@/lib/ruleEngine";
 
@@ -129,7 +129,24 @@ function WorkflowProgress({ caseItem }) {
   );
 }
 
-export default function CaseDetail({ caseItem, activeTab, onTabChange, onAttach, recentlyAttached, attachments, onApprove, onEscalate, onAccept, onEditDraft, onExportPacket }) {
+function isManualCase(caseItem) {
+  return (caseItem.audit_log || []).some((log) => log.actor === "Merchant Ops" && log.action === "case_created");
+}
+
+export default function CaseDetail({
+  caseItem,
+  activeTab,
+  onTabChange,
+  onAttach,
+  recentlyAttached,
+  attachments,
+  onApprove,
+  onEscalate,
+  onAccept,
+  onEditDraft,
+  onExportPacket,
+  onDelete,
+}) {
   const [localTab, setLocalTab] = useState("evidence-passport");
   const tab = activeTab || localTab;
 
@@ -144,6 +161,7 @@ export default function CaseDetail({ caseItem, activeTab, onTabChange, onAttach,
   const risk = riskTone(caseItem.risk_score);
   const ready = readinessTone(caseItem.readiness_score);
   const act = actionTone(caseItem.recommended_action);
+  const canDelete = isManualCase(caseItem);
 
   const setTab = (id) => {
     setLocalTab(id);
@@ -176,22 +194,34 @@ export default function CaseDetail({ caseItem, activeTab, onTabChange, onAttach,
               ))}
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-4 min-w-[260px]">
-            <div>
-              <div className="text-[11px] text-slate-400 uppercase">Risk</div>
-              <div className={cn("text-xs font-medium mb-1", textTone[risk.color])}>{risk.label} | {caseItem.risk_score}</div>
-              <Bar value={caseItem.risk_score} tone={risk.color} />
+          <div className="flex min-w-[260px] flex-col items-stretch gap-3">
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <div className="text-[11px] text-slate-400 uppercase">Risk</div>
+                <div className={cn("text-xs font-medium mb-1", textTone[risk.color])}>{risk.label} | {caseItem.risk_score}</div>
+                <Bar value={caseItem.risk_score} tone={risk.color} />
+              </div>
+              <div>
+                <div className="text-[11px] text-slate-400 uppercase">Readiness</div>
+                <div className={cn("text-xs font-medium mb-1", textTone[ready.color])}>{ready.label} | {caseItem.readiness_score}%</div>
+                <Bar value={caseItem.readiness_score} tone={ready.color} />
+              </div>
+              <div>
+                <div className="text-[11px] text-slate-400 uppercase">Confidence</div>
+                <div className="text-xs font-medium mb-1 text-slate-700">{caseItem.confidence_score}%</div>
+                <Bar value={caseItem.confidence_score} tone="blue" />
+              </div>
             </div>
-            <div>
-              <div className="text-[11px] text-slate-400 uppercase">Readiness</div>
-              <div className={cn("text-xs font-medium mb-1", textTone[ready.color])}>{ready.label} | {caseItem.readiness_score}%</div>
-              <Bar value={caseItem.readiness_score} tone={ready.color} />
-            </div>
-            <div>
-              <div className="text-[11px] text-slate-400 uppercase">Confidence</div>
-              <div className="text-xs font-medium mb-1 text-slate-700">{caseItem.confidence_score}%</div>
-              <Bar value={caseItem.confidence_score} tone="blue" />
-            </div>
+            {canDelete && (
+              <button
+                type="button"
+                onClick={onDelete}
+                className="inline-flex items-center justify-center gap-1.5 self-end rounded-md border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete test case
+              </button>
+            )}
           </div>
         </div>
       </div>

@@ -168,6 +168,11 @@ function addAudit(caseItem, actor, action, detail) {
   };
 }
 
+function isManualCase(caseItem) {
+  const auditLogs = caseItem.auditLogs || caseItem.audit_log || [];
+  return auditLogs.some((log) => log.actor === "Merchant Ops" && log.action === "case_created");
+}
+
 function getWebhookFingerprint(rawBody) {
   return crypto.createHash("sha256").update(rawBody).digest("hex");
 }
@@ -851,6 +856,32 @@ app.post("/api/cases/:id/export", async (req, res, next) => {
     });
     const finalRow = await getCaseByParam(db, req.params.id);
     res.json(toFrontendCase(finalRow));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/cases/:id", async (req, res, next) => {
+  try {
+    const db = await getPrisma();
+    if (!db) {
+      const caseItem = localCases.find((item) => item.id === req.params.id || item.case_id === req.params.id);
+      if (!caseItem) return res.status(404).json({ error: "Case not found" });
+      if (!isManualCase(caseItem)) {
+        return res.status(403).json({ error: "Only manually added test cases can be deleted" });
+      }
+      localCases = localCases.filter((item) => item.id !== caseItem.id && item.case_id !== caseItem.case_id);
+      return res.json({ deleted: true, id: caseItem.id, case_id: caseItem.case_id });
+    }
+
+    const caseRow = await getCaseByParam(db, req.params.id);
+    if (!caseRow) return res.status(404).json({ error: "Case not found" });
+    if (!isManualCase(caseRow)) {
+      return res.status(403).json({ error: "Only manually added test cases can be deleted" });
+    }
+
+    await db.case.delete({ where: { id: caseRow.id } });
+    res.json({ deleted: true, id: caseRow.caseId, case_id: caseRow.caseId });
   } catch (error) {
     next(error);
   }

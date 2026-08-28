@@ -149,6 +149,10 @@ function makeLocalCase(input, currentCount) {
   return { ...base, ...scoreCase(base) };
 }
 
+function isManualCase(caseItem) {
+  return (caseItem?.audit_log || []).some((log) => log.actor === "Merchant Ops" && log.action === "case_created");
+}
+
 function QueueInsight({ onCreateCase }) {
   return (
     <div className="bg-slate-900 text-white rounded-lg border border-slate-800 px-4 py-3 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
@@ -877,6 +881,33 @@ export default function Dashboard() {
     }
   };
 
+  const handleDeleteCase = async () => {
+    if (!selected || !isManualCase(selected)) return;
+    const confirmed = window.confirm(`Delete ${selected.case_id}? This removes the case, evidence, timeline, and audit records.`);
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch(`/api/cases/${selected.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Delete failed");
+      setCases((prev) => {
+        const nextCases = prev.filter((item) => item.id !== selected.id && item.case_id !== selected.case_id);
+        setSelectedId(nextCases[0]?.id || nextCases[0]?.case_id || null);
+        return nextCases;
+      });
+      setAttachments((prev) => {
+        const next = { ...prev };
+        delete next[selected.id];
+        delete next[selected.case_id];
+        return next;
+      });
+      setCasePanelOpen(false);
+      setDataSource("secure case store");
+      setLastSynced(new Date());
+    } catch {
+      setDataError("Could not delete case. Please refresh and try again.");
+    }
+  };
+
   const handleCreateCase = async (input) => {
     try {
       const res = await fetch("/api/cases", {
@@ -914,6 +945,7 @@ export default function Dashboard() {
       onAccept={() => handleDecision("accepted", "accepted")}
       onEditDraft={handleEditDraft}
       onExportPacket={handleExportPacket}
+      onDelete={handleDeleteCase}
     />
   ) : null;
 
