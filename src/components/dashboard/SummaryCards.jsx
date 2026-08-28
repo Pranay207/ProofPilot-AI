@@ -24,8 +24,8 @@ function Card({ icon: Icon, label, value, sub, tone }) {
   );
 }
 
-export default function SummaryCards({ cases }) {
-  const metrics = calculateProofPilotMetrics(cases);
+export default function SummaryCards({ cases, metrics: backendMetrics }) {
+  const metrics = backendMetrics || calculateProofPilotMetrics(cases);
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

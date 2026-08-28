@@ -43,8 +43,8 @@ function percent(value) {
   return `${Math.round(Number(value || 0) * 100)}%`;
 }
 
-export default function MetricsDashboard({ cases = [] }) {
-  const metrics = calculateProofPilotMetrics(cases);
+export default function MetricsDashboard({ cases = [], metrics: backendMetrics }) {
+  const metrics = backendMetrics || calculateProofPilotMetrics(cases);
   const validation = MODEL_CARD.validation || {};
   const cards = [
     {

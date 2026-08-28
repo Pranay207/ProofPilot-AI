@@ -5,11 +5,21 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import { SAMPLE_CASES } from "../src/lib/sampleData.js";
 import { EVIDENCE_LABELS, getRequired, scoreCase } from "../src/lib/ruleEngine.js";
-import { calculateProofPilotMetrics, REVIEW_COST_PER_CASE, TIME_SAVED_MIN_PER_CASE } from "../src/lib/metrics.js";
-import { MODEL_CARD } from "../src/lib/mlRiskModel.js";
 import { buildFallbackAiJudgment, safeParseAiJson, validateAiCaseJudgment } from "../src/lib/aiGuardrails.js";
 import { buildAiJudgment } from "../src/lib/aiJudgment.js";
 import { buildWorkflowSnapshot, FAILURE_STATES } from "../src/lib/workflow.js";
+import { buildEvaluationResponse, buildMetricsResponse } from "./services/metricsService.js";
+import { validateDecisionStatus, ensureContestHasEvidence } from "./services/decisionService.js";
+import { scoreAndClassifyCase } from "./services/riskScoringService.js";
+import { registerArchitectureRoutes } from "./routes/architecture.js";
+import {
+  extractWebhookIds as readWebhookIds,
+  getPayloadHash,
+  getWebhookEntity as readWebhookEntity,
+  recordWebhookEvent,
+  RAZORPAY_ALLOWED_WEBHOOK_EVENTS,
+} from "./services/webhookIdempotencyService.js";
+import { callRazorpay as requestRazorpay, getRazorpayConfig as readRazorpayConfig } from "./integrations/razorpayClient.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -25,12 +35,20 @@ app.post("/api/webhooks/razorpay", express.raw({ type: "application/json" }), as
   try {
     const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
     if (!secret) {
-      return res.status(503).json({ ok: false, error: "RAZORPAY_WEBHOOK_SECRET is not configured" });
+      return res.status(503).json({
+        ok: false,
+        error: "Webhook secret is not configured",
+        failure_state: FAILURE_STATES.NEEDS_MANUAL_REVIEW,
+      });
     }
 
     const signature = req.headers["x-razorpay-signature"];
     if (!signature) {
-      return res.status(400).json({ ok: false, error: "Missing x-razorpay-signature" });
+      return res.status(400).json({
+        ok: false,
+        error: "Missing webhook signature",
+        failure_state: FAILURE_STATES.WEBHOOK_SIGNATURE_FAILED,
+      });
     }
 
     const expected = crypto.createHmac("sha256", secret).update(req.body).digest("hex");
@@ -38,22 +56,16 @@ app.post("/api/webhooks/razorpay", express.raw({ type: "application/json" }), as
     const receivedBuffer = Buffer.from(String(signature));
     const valid = expectedBuffer.length === receivedBuffer.length && crypto.timingSafeEqual(expectedBuffer, receivedBuffer);
     if (!valid) {
-      return res.status(400).json({ ok: false, error: "Invalid Razorpay signature" });
+      return res.status(400).json({
+        ok: false,
+        error: "Invalid Razorpay signature",
+        failure_state: FAILURE_STATES.WEBHOOK_SIGNATURE_FAILED,
+      });
     }
 
     const payload = JSON.parse(req.body.toString("utf8"));
-    const allowedEvents = new Set([
-      "payment.captured",
-      "payment.failed",
-      "refund.processed",
-      "refund.failed",
-      "payment.dispute.created",
-      "payment.dispute.won",
-      "payment.dispute.lost",
-      "payment.dispute.closed",
-    ]);
 
-    if (!allowedEvents.has(payload.event)) {
+    if (!RAZORPAY_ALLOWED_WEBHOOK_EVENTS.has(payload.event)) {
       return res.json({ ok: true, ignored: true, event: payload.event });
     }
 
@@ -68,6 +80,7 @@ app.post("/api/webhooks/razorpay", express.raw({ type: "application/json" }), as
         event: payload.event,
         payment_signal: intake.payment_id || null,
         case_id: intake.case_id || null,
+        webhook_event: intake.audit || null,
       });
     }
 
@@ -78,10 +91,11 @@ app.post("/api/webhooks/razorpay", express.raw({ type: "application/json" }), as
         ok: true,
         received: true,
         event: payload.event,
-        stored_event: intake.stored,
-        payment_signal: intake.payment_id || null,
-        created_case: false,
-      });
+      stored_event: intake.stored,
+      payment_signal: intake.payment_id || null,
+      webhook_event: intake.audit || null,
+      created_case: false,
+    });
     }
 
     const created = await createCaseFromRazorpayDispute(payload);
@@ -92,6 +106,7 @@ app.post("/api/webhooks/razorpay", express.raw({ type: "application/json" }), as
       event: payload.event,
       stored_event: intake.stored,
       payment_signal: intake.payment_id || null,
+      webhook_event: intake.audit || null,
       created_case: created.created,
       case_id: created.case_id,
     });
@@ -166,8 +181,7 @@ function toFrontendCase(row) {
       .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
       .map((item) => ({ timestamp: item.timestamp, actor: cleanText(item.actor), action: cleanText(item.action), detail: cleanText(item.detail) })),
   };
-  const scored = { ...item, ...scoreCase(item) };
-  return { ...scored, ai_judgment: buildAiJudgment(scored), workflow: buildWorkflowSnapshot(scored) };
+  return scoreAndClassifyCase(item);
 }
 
 async function getCaseByParam(db, id) {
@@ -193,11 +207,11 @@ function isManualCase(caseItem) {
 }
 
 function getWebhookFingerprint(rawBody) {
-  return crypto.createHash("sha256").update(rawBody).digest("hex");
+  return getPayloadHash(rawBody);
 }
 
 function getWebhookEntity(payload, key) {
-  return payload?.payload?.[key]?.entity || null;
+  return readWebhookEntity(payload, key);
 }
 
 function fromRazorpayTimestamp(value) {
@@ -206,47 +220,12 @@ function fromRazorpayTimestamp(value) {
 }
 
 function extractWebhookIds(payload) {
-  const payment = getWebhookEntity(payload, "payment") || {};
-  const dispute = getWebhookEntity(payload, "dispute") || {};
-  const refund = getWebhookEntity(payload, "refund") || {};
-  return {
-    paymentId: payment.id || dispute.payment_id || refund.payment_id || null,
-    disputeId: dispute.id || null,
-    refundId: refund.id || null,
-  };
+  return readWebhookIds(payload);
 }
 
 async function recordRazorpayWebhook(payload, rawBody) {
-  const ids = extractWebhookIds(payload);
   const db = await getPrisma();
-  if (!db) {
-    return { stored: false, mode: "memory", payment_id: ids.paymentId, dispute_id: ids.disputeId };
-  }
-
-  const eventFingerprint = getWebhookFingerprint(rawBody);
-  const existing = await db.webhookEvent.findUnique({ where: { eventFingerprint } });
-  if (existing) {
-    return {
-      stored: false,
-      duplicate: true,
-      payment_id: existing.paymentId,
-      dispute_id: existing.disputeId,
-      case_id: existing.createdCaseId,
-    };
-  }
-
-  const saved = await db.webhookEvent.create({
-    data: {
-      event: payload.event || "unknown",
-      eventFingerprint,
-      paymentId: ids.paymentId,
-      disputeId: ids.disputeId,
-      refundId: ids.refundId,
-      payload,
-    },
-  });
-
-  return { stored: true, payment_id: saved.paymentId, dispute_id: saved.disputeId };
+  return recordWebhookEvent({ db, payload, rawBody });
 }
 
 async function markWebhookCaseCreated(payload, rawBody, caseId) {
@@ -378,89 +357,19 @@ function buildCasePayload(body, currentCount = 0) {
     merchant_response_draft: draft,
     audit_log: [{ timestamp: new Date().toISOString(), actor: "Merchant Ops", action: "case_created", detail: "Case added in ProofPilot AI" }],
   };
-  const scored = { ...frontendCase, ...scoreCase(frontendCase) };
-  const aiJudgment = buildAiJudgment(scored);
+  const scored = scoreAndClassifyCase(frontendCase);
   return {
     ...scored,
-    merchant_response_draft: body.merchant_response_draft || aiJudgment.response_draft,
-    ai_judgment: aiJudgment,
-    workflow: buildWorkflowSnapshot(scored),
+    merchant_response_draft: body.merchant_response_draft || scored.ai_judgment.response_draft,
   };
 }
 
 function attachWorkflow(cases) {
-  return cases.map((caseItem) => ({
-    ...caseItem,
-    ai_judgment: buildAiJudgment(caseItem),
-    workflow: buildWorkflowSnapshot(caseItem),
-  }));
+  return cases.map(scoreAndClassifyCase);
 }
 
 function buildEvaluationPayload(cases) {
-  const metrics = calculateProofPilotMetrics(cases);
-  const validation = MODEL_CARD.validation || {};
-  const confusion = validation.confusion || {};
-  const falsePositiveCost = Number(confusion.fp || 0) * REVIEW_COST_PER_CASE;
-
-  return {
-    ok: true,
-    problem: {
-      track: "AI Risk Manager",
-      loss_class: "Chargeback and dispute loss caused by missing or late merchant evidence",
-      measurable_outcome: "Reduce preventable dispute loss and review time while controlling false-positive review cost",
-    },
-    architecture: {
-      data_flow: [
-        "signed Razorpay webhook",
-        "idempotent event store",
-        "payment signal store",
-        "case creation",
-        "ML loss-risk score",
-        "deterministic evidence checklist",
-        "rule-based recommendation",
-        "human final approval",
-        "audit trail",
-      ],
-      ai_boundary: "AI classifies unstructured complaint text and drafts reviewer copy. Rules and humans control decisions.",
-      financial_safety: "ProofPilot never auto-submits disputes or refunds from AI output.",
-    },
-    model: {
-      name: MODEL_CARD.name,
-      type: MODEL_CARD.type,
-      features: MODEL_CARD.features,
-      validation: {
-        precision: validation.precision,
-        recall: validation.recall,
-        f1: validation.f1,
-        accuracy: validation.accuracy,
-        holdout_rows: validation.holdout_rows,
-        confusion,
-        false_positive_review_cost_inr: falsePositiveCost,
-      },
-    },
-    live_metrics: {
-      cases: metrics.totalCases,
-      high_risk_cases: metrics.highRiskCases,
-      proof_ready_cases: metrics.evidenceReadyCases,
-      waiting_for_decision: metrics.awaitingApprovalCases,
-      money_at_risk_inr: metrics.valueAtRisk,
-      recoverable_value_inr: metrics.recoverableValue,
-      net_benefit_inr: metrics.netBenefit,
-      ops_time_saved_minutes: metrics.reviewMinutesSaved,
-      assumptions: {
-        review_cost_per_case_inr: REVIEW_COST_PER_CASE,
-        time_saved_per_case_minutes: TIME_SAVED_MIN_PER_CASE,
-      },
-    },
-    failure_recovery: [
-      { failure: FAILURE_STATES.WEBHOOK_SIGNATURE_FAILED, behavior: "Reject request and do not create a case." },
-      { failure: FAILURE_STATES.WEBHOOK_DUPLICATE, behavior: "Return success safely and avoid duplicate case creation." },
-      { failure: FAILURE_STATES.PAYLOAD_INCOMPLETE, behavior: "Return validation error; do not partially write dispute case." },
-      { failure: FAILURE_STATES.AI_TIMEOUT, behavior: "Use deterministic score and fallback draft; route to human review." },
-      { failure: FAILURE_STATES.AI_INVALID_JSON, behavior: "Discard malformed AI output and use schema-safe fallback response." },
-      { failure: FAILURE_STATES.DB_WRITE_FAILED, behavior: "Return API error; do not mark external action as completed." },
-    ],
-  };
+  return buildEvaluationResponse(cases);
 }
 
 function mapRazorpayDisputeType(dispute = {}) {
@@ -605,44 +514,12 @@ async function createCaseFromRazorpayDispute(payload) {
   return { created: true, case_id: created.caseId };
 }
 
-const RAZORPAY_API_BASE = "https://api.razorpay.com/v1";
-
 function getRazorpayConfig() {
-  const keyId = process.env.RAZORPAY_KEY_ID;
-  const keySecret = process.env.RAZORPAY_KEY_SECRET;
-  return {
-    configured: Boolean(keyId && keySecret),
-    keyId,
-    keySecret,
-    mode: keyId?.startsWith("rzp_live_") ? "live" : keyId?.startsWith("rzp_test_") ? "test" : "unknown",
-    maskedKeyId: keyId ? `${keyId.slice(0, 8)}...${keyId.slice(-4)}` : "",
-  };
+  return readRazorpayConfig();
 }
 
 async function callRazorpay(path) {
-  const config = getRazorpayConfig();
-  if (!config.configured) {
-    const error = new Error("Razorpay keys are not configured");
-    error.status = 503;
-    throw error;
-  }
-
-  const auth = Buffer.from(`${config.keyId}:${config.keySecret}`).toString("base64");
-  const response = await fetch(`${RAZORPAY_API_BASE}${path}`, {
-    headers: {
-      Authorization: `Basic ${auth}`,
-      "Content-Type": "application/json",
-    },
-  });
-  const text = await response.text();
-  const body = text ? JSON.parse(text) : {};
-  if (!response.ok) {
-    const error = new Error(body?.error?.description || `Razorpay API error ${response.status}`);
-    error.status = response.status;
-    error.code = body?.error?.code;
-    throw error;
-  }
-  return body;
+  return requestRazorpay(path);
 }
 
 function normalizePayment(payment) {
@@ -685,6 +562,8 @@ app.get("/api/health", (_req, res) => {
     workflow: "signed webhook -> risk score -> proof checklist -> response draft -> human decision -> audit trail",
   });
 });
+
+registerArchitectureRoutes(app);
 
 app.get("/api/webhooks/razorpay", (_req, res) => {
   res.status(405).json({
@@ -752,15 +631,27 @@ app.post("/api/ai/judgment/analyze", (req, res) => {
   });
 });
 
+async function loadFrontendCases() {
+  const db = await getPrisma();
+  if (!db) return attachWorkflow(localCases);
+  const rows = await db.case.findMany({
+    orderBy: [{ riskScore: "desc" }, { createdAt: "desc" }],
+    include: { evidenceItems: true, timelineEvents: true, auditLogs: true },
+  });
+  return rows.map(toFrontendCase);
+}
+
+app.get("/api/metrics", async (_req, res, next) => {
+  try {
+    res.json(buildMetricsResponse(await loadFrontendCases()));
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/api/evaluation", async (_req, res, next) => {
   try {
-    const db = await getPrisma();
-    if (!db) return res.json(buildEvaluationPayload(attachWorkflow(localCases)));
-    const rows = await db.case.findMany({
-      orderBy: [{ riskScore: "desc" }, { createdAt: "desc" }],
-      include: { evidenceItems: true, timelineEvents: true, auditLogs: true },
-    });
-    res.json(buildEvaluationPayload(rows.map(toFrontendCase)));
+    res.json(buildEvaluationResponse(await loadFrontendCases()));
   } catch (error) {
     next(error);
   }
@@ -950,12 +841,12 @@ app.patch("/api/cases/:id/draft", async (req, res, next) => {
 app.patch("/api/cases/:id/decision", async (req, res, next) => {
   try {
     const { status } = req.body;
-    const allowedStatuses = new Set(["approved", "escalated", "accepted"]);
-    if (!allowedStatuses.has(status)) {
-      return res.status(400).json({ error: "Decision status must be approved, escalated, or accepted" });
-    }
+    validateDecisionStatus(status);
     const db = await getPrisma();
     if (!db) {
+      const current = localCases.find((caseItem) => caseItem.id === req.params.id || caseItem.case_id === req.params.id);
+      if (!current) return res.status(404).json({ error: "Case not found" });
+      ensureContestHasEvidence(current, status);
       localCases = localCases.map((caseItem) => {
         if (caseItem.id !== req.params.id && caseItem.case_id !== req.params.id) return caseItem;
         return addAudit({ ...caseItem, packet_status: status }, "Human Reviewer", status, `Packet ${status}`);
@@ -965,6 +856,7 @@ app.patch("/api/cases/:id/decision", async (req, res, next) => {
 
     const caseRow = await getCaseByParam(db, req.params.id);
     if (!caseRow) return res.status(404).json({ error: "Case not found" });
+    ensureContestHasEvidence(toFrontendCase(caseRow), status);
     await db.case.update({ where: { id: caseRow.id }, data: { packetStatus: status } });
     await db.auditLog.create({ data: { caseId: caseRow.id, actor: "Human Reviewer", action: status, detail: `Packet ${status}` } });
     const finalRow = await getCaseByParam(db, req.params.id);
@@ -1042,7 +934,12 @@ app.use((error, _req, res, _next) => {
   const malformedJson = error instanceof SyntaxError && error.status === 400 && "body" in error;
   const status = malformedJson ? 400 : Number(error.status || 500);
   if (status >= 500) console.error(error);
-  const payload = { error: malformedJson ? "Invalid JSON request body" : "ProofPilot API error" };
+  const failureState = error.failureState
+    || (malformedJson ? FAILURE_STATES.PAYLOAD_INCOMPLETE : status >= 500 ? FAILURE_STATES.DB_WRITE_FAILED : FAILURE_STATES.NEEDS_MANUAL_REVIEW);
+  const payload = {
+    error: malformedJson ? "Invalid JSON request body" : error.message || "ProofPilot API error",
+    failure_state: failureState,
+  };
   if (status >= 500 && process.env.NODE_ENV !== "production") payload.detail = error.message;
   res.status(status).json(payload);
 });

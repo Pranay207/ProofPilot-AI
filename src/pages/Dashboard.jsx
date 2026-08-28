@@ -29,6 +29,7 @@ import AnimatedValue from "@/components/dashboard/AnimatedValue";
 import { SAMPLE_CASES } from "@/lib/sampleData";
 import { actionTone, scoreCase, EVIDENCE_LABELS, getRequired } from "@/lib/ruleEngine";
 import { calculateProofPilotMetrics, formatMoney } from "@/lib/metrics";
+import { fetchBackendMetrics } from "@/lib/metricsApi";
 
 const CASE_SECTIONS = ["evidence-passport", "timeline", "missing-proof", "dispute-packet", "human-approval"];
 const PAGE_TITLES = {
@@ -421,8 +422,7 @@ function DataStatusStrip({ dataSource, loading, error, lastSynced, razorpayStatu
   );
 }
 
-function OverviewHome({ cases, onSelectCase, onNavigate, dataSource, loading, error, lastSynced, razorpayStatus }) {
-  const metrics = calculateProofPilotMetrics(cases);
+function OverviewHome({ cases, metrics, onSelectCase, onNavigate, dataSource, loading, error, lastSynced, razorpayStatus }) {
 
   return (
     <div className="space-y-4">
@@ -717,6 +717,19 @@ export default function Dashboard() {
   const [dataError, setDataError] = useState("");
   const [lastSynced, setLastSynced] = useState(null);
   const [razorpayStatus, setRazorpayStatus] = useState(null);
+  const [backendMetrics, setBackendMetrics] = useState(() => calculateProofPilotMetrics(SAMPLE_CASES));
+
+  const refreshMetrics = async (fallbackCases = cases) => {
+    try {
+      const nextMetrics = await fetchBackendMetrics(fallbackCases);
+      setBackendMetrics(nextMetrics);
+      return nextMetrics;
+    } catch {
+      const fallbackMetrics = calculateProofPilotMetrics(fallbackCases);
+      setBackendMetrics(fallbackMetrics);
+      return fallbackMetrics;
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -730,10 +743,12 @@ export default function Dashboard() {
         setSelectedId((current) => current || rows[0]?.id || rows[0]?.case_id || null);
         setDataSource("secure case store");
         setLastSynced(new Date());
+        refreshMetrics(rows);
       })
       .catch(() => {
         setDataSource("sample workspace");
         setDataError("API unavailable; showing bundled sample cases");
+        refreshMetrics(SAMPLE_CASES);
       })
       .finally(() => {
         if (!cancelled) setDataLoading(false);
@@ -825,7 +840,11 @@ export default function Dashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ evidenceKey, fileName }),
       });
-      if (res.ok) replaceCase(await res.json());
+      if (res.ok) {
+        const nextCase = await res.json();
+        replaceCase(nextCase);
+        await refreshMetrics();
+      }
     } catch {
       setDataSource("sample workspace");
     }
@@ -849,7 +868,11 @@ export default function Dashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
-      if (res.ok) replaceCase(await res.json());
+      if (res.ok) {
+        const nextCase = await res.json();
+        replaceCase(nextCase);
+        await refreshMetrics();
+      }
     } catch {
       setDataSource("sample workspace");
     }
@@ -865,7 +888,11 @@ export default function Dashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ draft: newDraft }),
       });
-      if (res.ok) replaceCase(await res.json());
+      if (res.ok) {
+        const nextCase = await res.json();
+        replaceCase(nextCase);
+        await refreshMetrics();
+      }
     } catch {
       setDataSource("sample workspace");
     }
@@ -880,7 +907,11 @@ export default function Dashboard() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
-      if (res.ok) replaceCase(await res.json());
+      if (res.ok) {
+        const nextCase = await res.json();
+        replaceCase(nextCase);
+        await refreshMetrics();
+      }
     } catch {
       setDataSource("sample workspace");
       setDataError("API unavailable; export recorded only in local session");
@@ -909,6 +940,7 @@ export default function Dashboard() {
       setCasePanelOpen(false);
       setDataSource("secure case store");
       setLastSynced(new Date());
+      await refreshMetrics();
     } catch {
       setDataError("Could not delete case. Please refresh and try again.");
     }
@@ -928,6 +960,7 @@ export default function Dashboard() {
       setActive("risk-queue");
       setCasePanelOpen(true);
       setDataSource("secure case store");
+      await refreshMetrics();
     } catch {
       const created = makeLocalCase(input, cases.length);
       setCases((prev) => [created, ...prev]);
@@ -935,6 +968,7 @@ export default function Dashboard() {
       setActive("risk-queue");
       setCasePanelOpen(true);
       setDataSource("sample workspace");
+      await refreshMetrics([created, ...cases]);
     }
   };
 
@@ -980,6 +1014,7 @@ export default function Dashboard() {
           {active === "overview" ? (
             <OverviewHome
               cases={cases}
+              metrics={backendMetrics}
               onSelectCase={setSelectedId}
               onNavigate={navigate}
               dataSource={dataSource}
@@ -989,13 +1024,13 @@ export default function Dashboard() {
               razorpayStatus={razorpayStatus}
             />
           ) : active === "metrics" ? (
-            <MetricsDashboard cases={cases} />
+            <MetricsDashboard cases={cases} metrics={backendMetrics} />
           ) : active === "audit-log" ? (
             <AuditLogView cases={cases} />
           ) : queuePage ? (
             <div className="space-y-4">
               <QueueInsight onCreateCase={() => setNewCaseOpen(true)} />
-              <SummaryCards cases={cases} />
+              <SummaryCards cases={cases} metrics={backendMetrics} />
               <RiskQueue cases={cases} selectedId={selected?.id} onSelect={selectCase} onCreateCase={() => setNewCaseOpen(true)} />
             </div>
           ) : null}
