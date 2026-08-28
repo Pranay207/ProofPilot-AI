@@ -1,5 +1,5 @@
 import React from "react";
-import { Target, ClipboardCheck, AlertOctagon, Clock, ShieldCheck, IndianRupee, TrendingUp, Scale, BrainCircuit } from "lucide-react";
+import { Target, ClipboardCheck, AlertOctagon, Clock, ShieldCheck, IndianRupee, TrendingUp, Scale, BrainCircuit, RotateCcw, LockKeyhole } from "lucide-react";
 import AnimatedValue from "./AnimatedValue";
 import { calculateProofPilotMetrics, formatMoney, REVIEW_COST_PER_CASE, TIME_SAVED_MIN_PER_CASE } from "@/lib/metrics";
 import { MODEL_CARD } from "@/lib/mlRiskModel";
@@ -92,8 +92,8 @@ export default function MetricsDashboard({ cases = [] }) {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900">Metrics Dashboard</h2>
-        <p className="text-sm text-slate-500">Live case metrics calculated from the current ProofPilot queue.</p>
+        <h2 className="text-lg font-semibold text-slate-900">Model & Impact</h2>
+        <p className="text-sm text-slate-500">Loss-risk model performance, merchant impact, and safety behavior from the current action queue.</p>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
@@ -195,6 +195,32 @@ export default function MetricsDashboard({ cases = [] }) {
           <p className="mt-3 text-[11px] text-slate-400">
             Net benefit = approved prevented loss + contest-ready value - review cost.
           </p>
+        </div>
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-4">
+        <div className="bg-white rounded-lg border border-slate-200 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <LockKeyhole className="w-4 h-4 text-emerald-600" />
+            <h3 className="text-sm font-semibold text-slate-900">AI Control Boundary</h3>
+          </div>
+          <div className="space-y-2 text-sm text-slate-600">
+            <div className="rounded-md bg-slate-50 px-3 py-2">AI classifies complaint intent and drafts reviewer copy.</div>
+            <div className="rounded-md bg-slate-50 px-3 py-2">Rules calculate readiness, recommendation, and safe next action.</div>
+            <div className="rounded-md bg-slate-50 px-3 py-2">Humans approve contest, accept/refund, or escalation before external action.</div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg border border-slate-200 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <RotateCcw className="w-4 h-4 text-blue-600" />
+            <h3 className="text-sm font-semibold text-slate-900">Failure Recovery</h3>
+          </div>
+          <div className="space-y-2 text-sm text-slate-600">
+            <div className="rounded-md bg-slate-50 px-3 py-2">Duplicate webhook: ignored safely, no duplicate case.</div>
+            <div className="rounded-md bg-slate-50 px-3 py-2">AI timeout or invalid JSON: fallback draft and human review.</div>
+            <div className="rounded-md bg-slate-50 px-3 py-2">Missing proof: contest is blocked until evidence is attached or reviewer escalates.</div>
+          </div>
         </div>
       </div>
     </div>

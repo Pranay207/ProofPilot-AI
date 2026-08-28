@@ -13,17 +13,17 @@ Merchants often lose disputes even when they have a valid case because payment r
 ProofPilot turns a risky dispute into an evidence-ready, human-approved response packet.
 
 ```text
-Razorpay payment/refund webhook
-  -> verified event intake
+Signed Razorpay webhook
+  -> idempotent event store
   -> payment signal store
-  -> dispute webhook
+  -> dispute case creation
   -> ML loss-risk detector
-  -> evidence verifier
-  -> missing proof radar
-  -> response packet draft
-  -> rule-based decision
-  -> human approval
-  -> export + audit log
+  -> deterministic evidence checklist
+  -> missing proof detection
+  -> AI-assisted response draft
+  -> rule-based recommendation
+  -> human final decision
+  -> export + audit trail
 ```
 
 ## Track Fit
@@ -48,6 +48,63 @@ The prototype uses a trained logistic regression model to estimate merchant-loss
 - evidence readiness
 
 The app displays the model card in the Metrics Dashboard. In production, the same pipeline can be replaced with LightGBM/XGBoost trained on historical Razorpay dispute outcomes.
+
+## AI Boundary
+
+ProofPilot uses AI only where judgment over unstructured information helps:
+
+- classify complaint intent
+- extract missing proof cues
+- summarize payment/refund/delivery context
+- draft reviewer-facing response text
+
+ProofPilot does **not** let AI control:
+
+- final refund decisions
+- exact money calculations
+- webhook verification
+- dispute submission
+- case state transitions
+
+Rules calculate readiness and recommendations. A human reviewer approves, escalates, or accepts every case before external action.
+
+## Case Lifecycle
+
+```text
+NEW_SIGNAL
+  -> NEEDS_PROOF
+  -> PROOF_READY
+  -> DRAFT_READY
+  -> AWAITING_APPROVAL
+  -> APPROVED_TO_CONTEST / ACCEPTED_LOSS / ESCALATED
+  -> CLOSED
+```
+
+Each case exposes a `workflow` snapshot with current state, next safe action, and whether external action is allowed.
+
+## Failure Recovery
+
+- Invalid webhook signature: reject and do not create a case.
+- Duplicate webhook: return success safely and avoid duplicate case creation.
+- Incomplete dispute payload: return validation error; do not partially write a case.
+- AI timeout: use deterministic score and fallback draft; route to human review.
+- AI invalid JSON: discard malformed output and use a schema-safe fallback response.
+- Database write failure: return API error; never mark external action completed.
+
+## Evaluator Endpoint
+
+```text
+GET /api/evaluation
+```
+
+Returns the judge-facing proof:
+
+- problem and track fit
+- architecture flow
+- AI boundary
+- model precision, recall, F1, accuracy, and false-positive review cost
+- live merchant impact metrics
+- failure recovery behavior
 
 ## Integrations
 

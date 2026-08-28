@@ -110,7 +110,14 @@ function WorkflowProgress({ caseItem }) {
           <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recommended Path</h3>
           <p className="mt-0.5 text-xs text-slate-500">Detect risk, check proof, draft response, approve, and export.</p>
         </div>
-        <span className="rounded bg-slate-100 px-2 py-1 text-[11px] font-medium uppercase text-slate-600">{caseItem.packet_status || "draft"}</span>
+        <div className="text-right">
+          <span className="rounded bg-slate-100 px-2 py-1 text-[11px] font-medium uppercase text-slate-600">
+            {caseItem.workflow?.state?.replace(/_/g, " ") || caseItem.packet_status || "draft"}
+          </span>
+          <p className="mt-1 max-w-xs text-[11px] text-slate-500">
+            {caseItem.workflow?.next_safe_action || "Reviewer must approve the final action."}
+          </p>
+        </div>
       </div>
       <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-6">
         {stages.map((stage) => {

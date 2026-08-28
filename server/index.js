@@ -5,6 +5,10 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import { SAMPLE_CASES } from "../src/lib/sampleData.js";
 import { EVIDENCE_LABELS, getRequired, scoreCase } from "../src/lib/ruleEngine.js";
+import { calculateProofPilotMetrics, REVIEW_COST_PER_CASE, TIME_SAVED_MIN_PER_CASE } from "../src/lib/metrics.js";
+import { MODEL_CARD } from "../src/lib/mlRiskModel.js";
+import { buildFallbackAiJudgment, safeParseAiJson, validateAiCaseJudgment } from "../src/lib/aiGuardrails.js";
+import { buildWorkflowSnapshot, FAILURE_STATES } from "../src/lib/workflow.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -53,6 +57,19 @@ app.post("/api/webhooks/razorpay", express.raw({ type: "application/json" }), as
     }
 
     const intake = await recordRazorpayWebhook(payload, req.body);
+    if (intake.duplicate) {
+      return res.json({
+        ok: true,
+        received: true,
+        duplicate: true,
+        failure_state: FAILURE_STATES.WEBHOOK_DUPLICATE,
+        message: "Duplicate Razorpay webhook ignored safely.",
+        event: payload.event,
+        payment_signal: intake.payment_id || null,
+        case_id: intake.case_id || null,
+      });
+    }
+
     await upsertPaymentSignalFromWebhook(payload);
 
     if (payload.event !== "payment.dispute.created") {
@@ -148,7 +165,8 @@ function toFrontendCase(row) {
       .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
       .map((item) => ({ timestamp: item.timestamp, actor: cleanText(item.actor), action: cleanText(item.action), detail: cleanText(item.detail) })),
   };
-  return { ...item, ...scoreCase(item) };
+  const scored = { ...item, ...scoreCase(item) };
+  return { ...scored, workflow: buildWorkflowSnapshot(scored) };
 }
 
 async function getCaseByParam(db, id) {
@@ -359,7 +377,79 @@ function buildCasePayload(body, currentCount = 0) {
     merchant_response_draft: draft,
     audit_log: [{ timestamp: new Date().toISOString(), actor: "Merchant Ops", action: "case_created", detail: "Case added in ProofPilot AI" }],
   };
-  return { ...frontendCase, ...scoreCase(frontendCase) };
+  const scored = { ...frontendCase, ...scoreCase(frontendCase) };
+  return { ...scored, workflow: buildWorkflowSnapshot(scored) };
+}
+
+function attachWorkflow(cases) {
+  return cases.map((caseItem) => ({ ...caseItem, workflow: buildWorkflowSnapshot(caseItem) }));
+}
+
+function buildEvaluationPayload(cases) {
+  const metrics = calculateProofPilotMetrics(cases);
+  const validation = MODEL_CARD.validation || {};
+  const confusion = validation.confusion || {};
+  const falsePositiveCost = Number(confusion.fp || 0) * REVIEW_COST_PER_CASE;
+
+  return {
+    ok: true,
+    problem: {
+      track: "AI Risk Manager",
+      loss_class: "Chargeback and dispute loss caused by missing or late merchant evidence",
+      measurable_outcome: "Reduce preventable dispute loss and review time while controlling false-positive review cost",
+    },
+    architecture: {
+      data_flow: [
+        "signed Razorpay webhook",
+        "idempotent event store",
+        "payment signal store",
+        "case creation",
+        "ML loss-risk score",
+        "deterministic evidence checklist",
+        "rule-based recommendation",
+        "human final approval",
+        "audit trail",
+      ],
+      ai_boundary: "AI classifies unstructured complaint text and drafts reviewer copy. Rules and humans control decisions.",
+      financial_safety: "ProofPilot never auto-submits disputes or refunds from AI output.",
+    },
+    model: {
+      name: MODEL_CARD.name,
+      type: MODEL_CARD.type,
+      features: MODEL_CARD.features,
+      validation: {
+        precision: validation.precision,
+        recall: validation.recall,
+        f1: validation.f1,
+        accuracy: validation.accuracy,
+        holdout_rows: validation.holdout_rows,
+        confusion,
+        false_positive_review_cost_inr: falsePositiveCost,
+      },
+    },
+    live_metrics: {
+      cases: metrics.totalCases,
+      high_risk_cases: metrics.highRiskCases,
+      proof_ready_cases: metrics.evidenceReadyCases,
+      waiting_for_decision: metrics.awaitingApprovalCases,
+      money_at_risk_inr: metrics.valueAtRisk,
+      recoverable_value_inr: metrics.recoverableValue,
+      net_benefit_inr: metrics.netBenefit,
+      ops_time_saved_minutes: metrics.reviewMinutesSaved,
+      assumptions: {
+        review_cost_per_case_inr: REVIEW_COST_PER_CASE,
+        time_saved_per_case_minutes: TIME_SAVED_MIN_PER_CASE,
+      },
+    },
+    failure_recovery: [
+      { failure: FAILURE_STATES.WEBHOOK_SIGNATURE_FAILED, behavior: "Reject request and do not create a case." },
+      { failure: FAILURE_STATES.WEBHOOK_DUPLICATE, behavior: "Return success safely and avoid duplicate case creation." },
+      { failure: FAILURE_STATES.PAYLOAD_INCOMPLETE, behavior: "Return validation error; do not partially write dispute case." },
+      { failure: FAILURE_STATES.AI_TIMEOUT, behavior: "Use deterministic score and fallback draft; route to human review." },
+      { failure: FAILURE_STATES.AI_INVALID_JSON, behavior: "Discard malformed AI output and use schema-safe fallback response." },
+      { failure: FAILURE_STATES.DB_WRITE_FAILED, behavior: "Return API error; do not mark external action as completed." },
+    ],
+  };
 }
 
 function mapRazorpayDisputeType(dispute = {}) {
@@ -577,7 +667,12 @@ function normalizeDispute(dispute) {
 }
 
 app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, mode: useDatabase ? "postgres" : "local-sample-data" });
+  res.json({
+    ok: true,
+    mode: useDatabase ? "postgres" : "local-sample-data",
+    product: "ProofPilot AI",
+    workflow: "signed webhook -> risk score -> proof checklist -> response draft -> human decision -> audit trail",
+  });
 });
 
 app.get("/api/webhooks/razorpay", (_req, res) => {
@@ -625,10 +720,36 @@ app.get("/api/integrations/razorpay/disputes/:id", async (req, res, next) => {
   }
 });
 
+app.post("/api/ai/judgment/validate", (req, res) => {
+  const parsed = safeParseAiJson(req.body);
+  if (!parsed.ok) {
+    return res.json(buildFallbackAiJudgment({}, parsed.reason));
+  }
+  res.json({
+    ok: true,
+    judgment: validateAiCaseJudgment(parsed.value),
+    boundary: "AI output is advisory only; final decisions require rules and human approval.",
+  });
+});
+
+app.get("/api/evaluation", async (_req, res, next) => {
+  try {
+    const db = await getPrisma();
+    if (!db) return res.json(buildEvaluationPayload(attachWorkflow(localCases)));
+    const rows = await db.case.findMany({
+      orderBy: [{ riskScore: "desc" }, { createdAt: "desc" }],
+      include: { evidenceItems: true, timelineEvents: true, auditLogs: true },
+    });
+    res.json(buildEvaluationPayload(rows.map(toFrontendCase)));
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/api/cases", async (_req, res, next) => {
   try {
     const db = await getPrisma();
-    if (!db) return res.json(localCases);
+    if (!db) return res.json(attachWorkflow(localCases));
     const rows = await db.case.findMany({
       orderBy: [{ riskScore: "desc" }, { createdAt: "desc" }],
       include: { evidenceItems: true, timelineEvents: true, auditLogs: true },
