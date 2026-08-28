@@ -8,6 +8,7 @@ import { EVIDENCE_LABELS, getRequired, scoreCase } from "../src/lib/ruleEngine.j
 import { calculateProofPilotMetrics, REVIEW_COST_PER_CASE, TIME_SAVED_MIN_PER_CASE } from "../src/lib/metrics.js";
 import { MODEL_CARD } from "../src/lib/mlRiskModel.js";
 import { buildFallbackAiJudgment, safeParseAiJson, validateAiCaseJudgment } from "../src/lib/aiGuardrails.js";
+import { buildAiJudgment } from "../src/lib/aiJudgment.js";
 import { buildWorkflowSnapshot, FAILURE_STATES } from "../src/lib/workflow.js";
 
 const app = express();
@@ -166,7 +167,7 @@ function toFrontendCase(row) {
       .map((item) => ({ timestamp: item.timestamp, actor: cleanText(item.actor), action: cleanText(item.action), detail: cleanText(item.detail) })),
   };
   const scored = { ...item, ...scoreCase(item) };
-  return { ...scored, workflow: buildWorkflowSnapshot(scored) };
+  return { ...scored, ai_judgment: buildAiJudgment(scored), workflow: buildWorkflowSnapshot(scored) };
 }
 
 async function getCaseByParam(db, id) {
@@ -378,11 +379,21 @@ function buildCasePayload(body, currentCount = 0) {
     audit_log: [{ timestamp: new Date().toISOString(), actor: "Merchant Ops", action: "case_created", detail: "Case added in ProofPilot AI" }],
   };
   const scored = { ...frontendCase, ...scoreCase(frontendCase) };
-  return { ...scored, workflow: buildWorkflowSnapshot(scored) };
+  const aiJudgment = buildAiJudgment(scored);
+  return {
+    ...scored,
+    merchant_response_draft: body.merchant_response_draft || aiJudgment.response_draft,
+    ai_judgment: aiJudgment,
+    workflow: buildWorkflowSnapshot(scored),
+  };
 }
 
 function attachWorkflow(cases) {
-  return cases.map((caseItem) => ({ ...caseItem, workflow: buildWorkflowSnapshot(caseItem) }));
+  return cases.map((caseItem) => ({
+    ...caseItem,
+    ai_judgment: buildAiJudgment(caseItem),
+    workflow: buildWorkflowSnapshot(caseItem),
+  }));
 }
 
 function buildEvaluationPayload(cases) {
@@ -729,6 +740,15 @@ app.post("/api/ai/judgment/validate", (req, res) => {
     ok: true,
     judgment: validateAiCaseJudgment(parsed.value),
     boundary: "AI output is advisory only; final decisions require rules and human approval.",
+  });
+});
+
+app.post("/api/ai/judgment/analyze", (req, res) => {
+  const caseItem = req.body && typeof req.body === "object" ? req.body : {};
+  res.json({
+    ok: true,
+    judgment: buildAiJudgment(caseItem),
+    boundary: "AI classifies complaint text, extracts useful signals, and drafts response text only.",
   });
 });
 

@@ -44,6 +44,8 @@ function ScoreExplanation({ caseItem }) {
   const present = required.filter((key) => hasEvidence(caseItem, key));
   const missing = required.filter((key) => !hasEvidence(caseItem, key));
   const modelReasons = caseItem.model_reasons?.length ? caseItem.model_reasons : ["Baseline dispute pattern"];
+  const aiJudgment = caseItem.ai_judgment || {};
+  const extracted = aiJudgment.extracted_signals || {};
 
   return (
     <div className="grid lg:grid-cols-3 gap-3">
@@ -80,12 +82,23 @@ function ScoreExplanation({ caseItem }) {
       <div className="rounded-lg border border-slate-200 bg-white p-3">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
           <ShieldCheck className="w-4 h-4 text-blue-600" />
-          Confidence
+          AI Judgment
         </div>
         <div className="mt-2 text-sm text-slate-700">
-          Confidence combines proof coverage, payment IDs, complaint text, timeline depth, and rule match.
+          Intent: <span className="font-semibold text-slate-900">{(aiJudgment.intent || caseItem.dispute_type).replace(/_/g, " ")}</span>
         </div>
-        <div className="mt-2 text-[11px] font-medium text-blue-700">Current confidence: {caseItem.confidence_score}%</div>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {extracted.refund_mention && <span className="rounded bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700">refund mention</span>}
+          {extracted.delivery_claim && <span className="rounded bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700">delivery claim</span>}
+          {extracted.fraud_claim && <span className="rounded bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700">fraud claim</span>}
+          {(extracted.dates || []).slice(0, 2).map((date) => (
+            <span key={date} className="rounded bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-600">{date}</span>
+          ))}
+          {!extracted.refund_mention && !extracted.delivery_claim && !extracted.fraud_claim && !(extracted.dates || []).length && (
+            <span className="rounded bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-600">no extra signals</span>
+          )}
+        </div>
+        <div className="mt-2 text-[11px] font-medium text-blue-700">AI cannot submit. Human approval required.</div>
       </div>
     </div>
   );

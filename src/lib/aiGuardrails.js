@@ -39,6 +39,10 @@ export function validateAiCaseJudgment(rawJudgment = {}) {
     confidence: safeConfidence,
     missing_evidence: missingEvidence,
     response_draft: responseDraft,
+    extracted_signals: rawJudgment.extracted_signals && typeof rawJudgment.extracted_signals === "object" ? rawJudgment.extracted_signals : {},
+    risk_reasons: Array.isArray(rawJudgment.risk_reasons)
+      ? rawJudgment.risk_reasons.filter((item) => typeof item === "string").slice(0, 5)
+      : [],
     safe_to_auto_submit: false,
     requires_human_approval: true,
   };
