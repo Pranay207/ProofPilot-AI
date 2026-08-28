@@ -32,11 +32,11 @@ export default function RiskQueue({ cases, selectedId, onSelect, onCreateCase })
     <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
       <div className="px-4 py-3 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div>
-          <h2 className="text-sm font-semibold text-slate-900">Risk Queue</h2>
-          <p className="text-xs text-slate-500">{cases.length} flagged transactions ranked by loss and evidence readiness.</p>
+          <h2 className="text-sm font-semibold text-slate-900">Action Queue</h2>
+          <p className="text-xs text-slate-500">{cases.length} dispute cases ranked by merchant loss risk, missing proof, and deadline.</p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="hidden text-xs text-slate-500 sm:block">Click a row to open the workflow.</div>
+          <div className="hidden text-xs text-slate-500 sm:block">Open a case to see what happened, what is missing, and what to do next.</div>
           <button onClick={onCreateCase} className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700">
             <PlusCircle className="h-3.5 w-3.5" />
             New case
@@ -64,8 +64,8 @@ export default function RiskQueue({ cases, selectedId, onSelect, onCreateCase })
               <tr>
                 <td colSpan={10} className="px-4 py-10 text-center">
                   <div className="mx-auto max-w-sm">
-                    <div className="text-sm font-semibold text-slate-900">No risk cases in the queue</div>
-                    <p className="mt-1 text-xs text-slate-500">Create a case to generate an evidence passport, score risk, and prepare a human-approved response packet.</p>
+                    <div className="text-sm font-semibold text-slate-900">No dispute cases need action</div>
+                    <p className="mt-1 text-xs text-slate-500">Create a case to score risk, check proof, and prepare a reviewer-approved response.</p>
                     <button onClick={onCreateCase} className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700">
                       <PlusCircle className="h-3.5 w-3.5" />
                       New case

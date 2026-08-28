@@ -17,7 +17,7 @@ export default function EvidencePassport({ caseItem, onAttach, attachments }) {
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-lg border border-slate-200 p-4">
-        <h3 className="text-sm font-semibold text-slate-900 mb-3">Payment & Order Details</h3>
+        <h3 className="text-sm font-semibold text-slate-900 mb-3">Proof Checklist</h3>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <Field label="Case ID" value={caseItem.case_id} mono />
           <Field label="Payment ID" value={caseItem.payment_id} mono />
@@ -48,7 +48,7 @@ export default function EvidencePassport({ caseItem, onAttach, attachments }) {
 
       <div className="bg-white rounded-lg border border-slate-200 p-4">
         <div className="flex items-center justify-between mb-1">
-          <span className="text-[11px] uppercase tracking-wide text-slate-400">Readiness Score</span>
+          <span className="text-[11px] uppercase tracking-wide text-slate-400">Proof Readiness</span>
           <span className="text-sm font-semibold text-slate-800 tabular-nums">{caseItem.readiness_score}%</span>
         </div>
         <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
@@ -58,7 +58,7 @@ export default function EvidencePassport({ caseItem, onAttach, attachments }) {
 
       <div className="grid md:grid-cols-2 gap-4">
         <div className="bg-white rounded-lg border border-slate-200 p-4">
-          <h3 className="text-sm font-semibold text-emerald-700 mb-3">Available Evidence</h3>
+          <h3 className="text-sm font-semibold text-emerald-700 mb-3">Proof Available</h3>
           {caseItem.available_evidence?.length ? (
             <ul className="space-y-1.5">
               {caseItem.available_evidence.map((e) => (
@@ -78,7 +78,7 @@ export default function EvidencePassport({ caseItem, onAttach, attachments }) {
           )}
         </div>
         <div className="bg-white rounded-lg border border-slate-200 p-4">
-          <h3 className="text-sm font-semibold text-red-600 mb-3">Missing Evidence</h3>
+          <h3 className="text-sm font-semibold text-red-600 mb-3">Proof Missing</h3>
           {caseItem.missing_evidence?.length ? (
             <ul className="space-y-2">
               {caseItem.missing_evidence.map((e) => (

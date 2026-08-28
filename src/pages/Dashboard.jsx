@@ -31,6 +31,12 @@ import { actionTone, scoreCase, EVIDENCE_LABELS, getRequired } from "@/lib/ruleE
 import { calculateProofPilotMetrics, formatMoney } from "@/lib/metrics";
 
 const CASE_SECTIONS = ["evidence-passport", "timeline", "missing-proof", "dispute-packet", "human-approval"];
+const PAGE_TITLES = {
+  overview: "Overview",
+  "risk-queue": "Action Queue",
+  metrics: "Model & Impact",
+  "audit-log": "Audit Trail",
+};
 
 const DISPUTE_TYPES = [
   "goods_not_received",
@@ -130,12 +136,12 @@ function makeLocalCase(input, currentCount) {
     readiness_score: 0,
     confidence_score: 0,
     customer_message: input.customer_message || defaults.customer_message,
-    case_summary: input.case_summary || `${TYPE_LABEL[disputeType]} case for ${input.customer_name || "new customer"}. ProofPilot created a new evidence passport and checklist.`,
+    case_summary: input.case_summary || `${TYPE_LABEL[disputeType]} case for ${input.customer_name || "new customer"}. ProofPilot created a proof checklist and response workflow.`,
     available_evidence: available,
     missing_evidence: missing,
     timeline_events: [
       { event: "payment.captured", timestamp: new Date().toISOString(), status: "ok", detail: `${formatMoney(input.amount || 999)} captured` },
-      { event: "proofpilot.case.created", timestamp: new Date().toISOString(), status: "alert", detail: "Evidence passport created from merchant input" },
+      { event: "proofpilot.case.created", timestamp: new Date().toISOString(), status: "alert", detail: "Proof checklist created from merchant input" },
     ],
     recommended_action: "escalate",
     action_reason: "New case created. Awaiting proof readiness evaluation.",
@@ -161,9 +167,9 @@ function QueueInsight({ onCreateCase }) {
           <Sparkles className="w-4 h-4 text-slate-950" />
         </div>
         <div>
-          <h2 className="text-sm font-semibold">Chargeback evidence responder for one clear loss class.</h2>
+          <h2 className="text-sm font-semibold">Resolve risky disputes before they become merchant losses.</h2>
           <p className="text-xs text-slate-300 mt-1">
-            Select a risky dispute to see loss detection, evidence verification, response drafting, human approval, and export.
+            Open a case to see the risk, missing proof, safest action, reviewer decision, and export-ready response.
           </p>
         </div>
       </div>
@@ -171,15 +177,15 @@ function QueueInsight({ onCreateCase }) {
         <div className="grid grid-cols-3 gap-3 flex-1">
           <div className="bg-white/10 rounded-md px-3 py-2">
             <div className="text-slate-400">Workflow</div>
-            <div className="font-semibold mt-1">Dispute to packet</div>
+            <div className="font-semibold mt-1">Case to action</div>
           </div>
           <div className="bg-white/10 rounded-md px-3 py-2">
             <div className="text-slate-400">AI role</div>
-            <div className="font-semibold mt-1">Score + explain</div>
+            <div className="font-semibold mt-1">Risk + proof</div>
           </div>
           <div className="bg-white/10 rounded-md px-3 py-2">
             <div className="text-slate-400">Final action</div>
-            <div className="font-semibold mt-1">Human approved</div>
+            <div className="font-semibold mt-1">Reviewer approved</div>
           </div>
         </div>
         <button onClick={onCreateCase} className="inline-flex items-center justify-center gap-1.5 rounded-md bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-100">
@@ -256,7 +262,7 @@ function PriorityBoard({ cases, onSelectCase, onOpenQueue }) {
       <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
         <div>
           <h3 className="text-sm font-semibold text-slate-900">Priority Board</h3>
-          <p className="mt-1 text-xs text-slate-500">Cases where risk is high and proof readiness is weak.</p>
+          <p className="mt-1 text-xs text-slate-500">Start with cases most likely to lose money or miss proof.</p>
         </div>
         <button
           onClick={onOpenQueue}
@@ -285,7 +291,7 @@ function PriorityBoard({ cases, onSelectCase, onOpenQueue }) {
                   </span>
                 </div>
                 <div className="mt-1 truncate font-mono text-xs text-slate-500">{caseItem.order_id}</div>
-                <div className="mt-1 text-xs font-medium text-slate-600">{priorityReason(caseItem)}</div>
+            <div className="mt-1 text-xs font-medium text-slate-600">{priorityReason(caseItem)}</div>
               </div>
               <div>
                 <div className="text-[11px] uppercase text-slate-400">Risk</div>
@@ -308,7 +314,7 @@ function PriorityBoard({ cases, onSelectCase, onOpenQueue }) {
 
 function CompactSafetyPanel() {
   const items = [
-    "Reviewer approval before external action",
+    "Reviewer approval before any external action",
     "Rule engine controls contest, accept, and escalate paths",
     "Evidence-backed packet for every decision",
     "Refund-safe drafts with full audit history",
@@ -337,22 +343,22 @@ function TrackFitPanel() {
     {
       label: "Track",
       value: "AI Risk Manager",
-      detail: "Stops merchant loss from chargebacks and disputes.",
+      detail: "Stops merchant loss from disputes, refunds, and chargebacks.",
     },
     {
       label: "Loss class",
-      value: "Chargeback evidence loss",
-      detail: "Merchant loses because proof is missing, late, or scattered.",
+      value: "Evidence readiness loss",
+      detail: "Merchant loses because payment, refund, delivery, or complaint proof is scattered.",
     },
     {
       label: "Working system",
-      value: "Detector + verifier + responder",
-      detail: "Scores risk, checks evidence, drafts a packet, routes to human.",
+      value: "Risk score + proof check + final decision",
+      detail: "Scores loss risk, checks proof, drafts response, routes to reviewer.",
     },
     {
       label: "Measured bar",
       value: "Precision, recall, false-positive cost",
-      detail: "Model card and ROI metrics are visible in Metrics Dashboard.",
+      detail: "Model card and ROI metrics are visible in Model & Impact.",
     },
   ];
 
@@ -389,7 +395,7 @@ function DataStatusStrip({ dataSource, loading, error, lastSynced, razorpayStatu
           </span>
           <div>
             <div className="text-sm font-semibold text-slate-900">
-              {loading ? "Syncing merchant risk queue" : connected ? "Merchant risk workspace connected" : "Merchant review workspace ready"}
+              {loading ? "Syncing merchant action queue" : connected ? "Merchant dispute workspace connected" : "Merchant dispute workspace ready"}
             </div>
             <p className="mt-0.5 text-xs text-slate-500">
               {error || (lastSynced ? `Last synced ${lastSynced.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}` : "Waiting for first sync")}
@@ -426,19 +432,19 @@ function OverviewHome({ cases, onSelectCase, onNavigate, dataSource, loading, er
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_440px] xl:items-center">
           <div className="min-w-0">
             <div className="inline-flex items-center gap-2 rounded-md border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
-              <ShieldCheck className="h-3.5 w-3.5" /> AI Risk Manager | Chargeback Evidence Responder
+              <ShieldCheck className="h-3.5 w-3.5" /> AI Risk Manager | Dispute Loss Prevention
             </div>
             <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950 md:text-3xl">ProofPilot AI</h2>
-            <div className="mt-1 text-sm font-medium text-slate-700">Working detector, verifier, and human-approved responder for merchant dispute loss.</div>
+            <div className="mt-1 text-sm font-medium text-slate-700">A simple action queue for risky payments, disputes, missing proof, and final merchant decisions.</div>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600 md:text-base">
-              ProofPilot helps Razorpay merchants prevent one clear loss class: chargebacks lost because evidence is missing, late, or scattered. It converts risky disputes into evidence-ready packets before response deadlines are missed.
+              ProofPilot shows which dispute can lose money, what proof is missing, and what action is safest. It turns Razorpay payment and dispute signals into reviewer-approved response packets before deadlines are missed.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <button onClick={() => onNavigate("risk-queue")} className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-2 text-xs font-medium text-white hover:bg-slate-800">
-                Review risk queue <ArrowRight className="h-3.5 w-3.5" />
+                Open action queue <ArrowRight className="h-3.5 w-3.5" />
               </button>
               <button onClick={() => onNavigate("metrics")} className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">
-                View metrics
+                View model impact
               </button>
             </div>
           </div>
@@ -453,26 +459,26 @@ function OverviewHome({ cases, onSelectCase, onNavigate, dataSource, loading, er
       <TrackFitPanel />
 
       <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <ImpactCard icon={Radar} label="Flagged Cases" value={metrics.totalCases} hint={`${metrics.highRiskCases} high risk | avg risk ${metrics.averageRisk}`} tone="amber" />
-        <ImpactCard icon={FileCheck2} label="Evidence Ready" value={`${metrics.evidenceReadyCases}/${metrics.totalCases}`} hint={`${metrics.actionReadyCases} contest-ready packets`} tone="emerald" />
-        <ImpactCard icon={UserCheck} label="Awaiting Approval" value={metrics.awaitingApprovalCases} hint="AI cannot submit directly" tone="slate" />
-        <ImpactCard icon={IndianRupee} label="Value At Risk" value={formatMoney(metrics.valueAtRisk)} hint="open draft/escalated cases" tone="blue" />
+        <ImpactCard icon={Radar} label="Cases Needing Action" value={metrics.totalCases} hint={`${metrics.highRiskCases} high risk | avg risk ${metrics.averageRisk}`} tone="amber" />
+        <ImpactCard icon={FileCheck2} label="Proof Ready" value={`${metrics.evidenceReadyCases}/${metrics.totalCases}`} hint={`${metrics.actionReadyCases} response-ready packets`} tone="emerald" />
+        <ImpactCard icon={UserCheck} label="Waiting For Decision" value={metrics.awaitingApprovalCases} hint="reviewer approval required" tone="slate" />
+        <ImpactCard icon={IndianRupee} label="Money At Risk" value={formatMoney(metrics.valueAtRisk)} hint="open draft/escalated cases" tone="blue" />
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="rounded-lg border border-slate-200 bg-white p-4">
           <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h3 className="text-sm font-semibold text-slate-900">Operating Model</h3>
-              <p className="text-xs text-slate-500">Correct AI Risk Manager workflow from event intake to audited human action.</p>
+              <h3 className="text-sm font-semibold text-slate-900">How A Merchant Uses It</h3>
+              <p className="text-xs text-slate-500">A clear path from risky dispute to approved response.</p>
             </div>
           </div>
           <div className="grid gap-4 md:grid-cols-5">
-            <WorkflowStep index={1} icon={Radar} title="Dispute intake" text="Ingest Razorpay payment, refund, and dispute signals." />
-            <WorkflowStep index={2} icon={ShieldCheck} title="Loss detector" text="Predict merchant-loss risk with the trained model." />
-            <WorkflowStep index={3} icon={FileCheck2} title="Evidence verifier" text="Check required proof and expose missing documents." />
-            <WorkflowStep index={4} icon={Sparkles} title="Response packet" text="Draft a concise dispute response with evidence." />
-            <WorkflowStep index={5} icon={UserCheck} title="Human action" text="Approve, accept, escalate, export, and audit." isLast />
+            <WorkflowStep index={1} icon={Radar} title="See risky case" text="Payment, refund, dispute, and complaint signals are grouped." />
+            <WorkflowStep index={2} icon={ShieldCheck} title="Know the risk" text="Model scores chance of merchant loss and explains why." />
+            <WorkflowStep index={3} icon={FileCheck2} title="Fix missing proof" text="Required invoice, refund, delivery, or policy proof is checked." />
+            <WorkflowStep index={4} icon={Sparkles} title="Review response" text="A concise response draft is prepared from the proof." />
+            <WorkflowStep index={5} icon={UserCheck} title="Take decision" text="Reviewer approves, escalates, accepts, exports, and audits." isLast />
           </div>
         </div>
         <CompactSafetyPanel />
@@ -491,7 +497,7 @@ function CaseDrawer({ open, caseItem, detail, onClose }) {
       <aside className="absolute right-0 top-0 h-full w-full max-w-5xl overflow-y-auto border-l border-slate-200 bg-slate-50 shadow-2xl">
         <div className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 md:px-5">
           <div className="min-w-0">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Selected case workflow</div>
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Selected case</div>
             <div className="mt-0.5 truncate text-sm font-semibold text-slate-950">
               {caseItem.customer_name} | {caseItem.dispute_type.replace(/_/g, " ")} | {caseItem.case_id}
             </div>
@@ -599,7 +605,7 @@ function NewCaseModal({ open, onClose, onSubmit }) {
             <div>
               <h2 className="text-base font-semibold text-slate-950">Add dispute risk case</h2>
               <p className="mt-1 text-xs text-slate-500">
-                Creates an evidence passport and routes the case into the merchant review queue.
+                Creates a proof checklist and routes the case into the merchant review queue.
               </p>
             </div>
             <button type="button" onClick={onClose} className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50" aria-label="Close">
@@ -867,7 +873,7 @@ export default function Dashboard() {
 
   const handleExportPacket = async () => {
     if (!selected) return;
-    const auditLog = addAudit("packet_exported", `Exported dispute packet for ${selected.order_id}`);
+    const auditLog = addAudit("packet_exported", `Exported response packet for ${selected.order_id}`);
     updateCase(selected.id, { audit_log: auditLog });
     try {
       const res = await fetch(`/api/cases/${selected.id}/export`, {
@@ -962,7 +968,7 @@ export default function Dashboard() {
             </button>
             <div className="flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-emerald-600" />
-              <h1 className="text-sm font-semibold text-slate-900 capitalize">{active.replace(/-/g, " ")}</h1>
+              <h1 className="text-sm font-semibold text-slate-900">{PAGE_TITLES[active] || active.replace(/-/g, " ")}</h1>
             </div>
           </div>
           <div className="text-xs font-medium text-slate-500 hidden sm:block">

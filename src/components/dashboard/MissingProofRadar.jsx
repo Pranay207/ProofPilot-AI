@@ -28,14 +28,14 @@ export default function MissingProofRadar({ caseItem, recentlyAttached = [], att
       <div className="bg-white rounded-lg border border-slate-200 p-4">
         <div className="flex items-center gap-2 mb-1">
           <Radar className="w-4 h-4 text-blue-600" />
-          <h3 className="text-sm font-semibold text-slate-900">Missing Proof Radar</h3>
+          <h3 className="text-sm font-semibold text-slate-900">Missing Proof</h3>
         </div>
         <p className="text-xs text-slate-500 mb-4">
-          Required evidence for <span className="font-medium text-slate-700">{caseItem.dispute_type.replace(/_/g, " ")}</span>. Attach missing proof to raise readiness.
+          Required proof for <span className="font-medium text-slate-700">{caseItem.dispute_type.replace(/_/g, " ")}</span>. Attach what is missing to make the response safer.
         </p>
 
         <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-          <span>Evidence coverage</span>
+          <span>Proof coverage</span>
           <span className="font-medium text-slate-700">{coverage}% | {have}/{required.length}</span>
         </div>
         <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
@@ -44,7 +44,7 @@ export default function MissingProofRadar({ caseItem, recentlyAttached = [], att
       </div>
 
       <div className="bg-white rounded-lg border border-slate-200 p-4">
-        <h3 className="text-sm font-semibold text-slate-900 mb-3">Required Evidence Checklist</h3>
+        <h3 className="text-sm font-semibold text-slate-900 mb-3">Required Proof Checklist</h3>
         {required.length === 0 ? (
           <div className="text-sm text-slate-400 italic">No checklist defined for this dispute type.</div>
         ) : (

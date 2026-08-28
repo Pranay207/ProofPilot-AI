@@ -75,9 +75,9 @@ export default function DisputePacket({ caseItem, onExport }) {
       <div className="bg-white rounded-lg border border-slate-200 p-4">
         <div className="flex items-center gap-2 mb-3">
           <FileText className="w-4 h-4 text-slate-700" />
-          <h3 className="text-sm font-semibold text-slate-900">Dispute Packet</h3>
+          <h3 className="text-sm font-semibold text-slate-900">Response Draft</h3>
           <div className="ml-auto flex items-center gap-2">
-            <span className="hidden sm:inline text-[11px] text-slate-400">AI-generated draft | human approval required</span>
+            <span className="hidden sm:inline text-[11px] text-slate-400">AI draft | reviewer approval required</span>
             <button
               type="button"
               onClick={() => {
@@ -87,7 +87,7 @@ export default function DisputePacket({ caseItem, onExport }) {
               className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
             >
               <Download className="w-3.5 h-3.5" />
-              Export packet
+              Export response
             </button>
           </div>
         </div>
@@ -106,7 +106,7 @@ export default function DisputePacket({ caseItem, onExport }) {
         <div className={`rounded-md border p-3 ${toneClasses[act.color]}`}>
           <div className="flex items-center gap-2">
             <ShieldAlert className="w-4 h-4" />
-            <span className="text-[11px] uppercase tracking-wide font-semibold">Recommended Action</span>
+            <span className="text-[11px] uppercase tracking-wide font-semibold">Safest Action</span>
           </div>
           <div className="mt-1 text-sm font-semibold">{act.label}</div>
           <p className="text-xs mt-1 opacity-80">{caseItem.action_reason}</p>
@@ -120,7 +120,7 @@ export default function DisputePacket({ caseItem, onExport }) {
 
       <div className="grid md:grid-cols-2 gap-4">
         <div className="bg-white rounded-lg border border-slate-200 p-4">
-          <h3 className="text-sm font-semibold text-emerald-700 mb-2">Evidence Used</h3>
+        <h3 className="text-sm font-semibold text-emerald-700 mb-2">Proof Used</h3>
           <ul className="space-y-1 text-sm text-slate-700">
             {(caseItem.available_evidence || []).map((e) => (
               <li key={e}>- {EVIDENCE_LABELS[e] || e}</li>
@@ -129,7 +129,7 @@ export default function DisputePacket({ caseItem, onExport }) {
           </ul>
         </div>
         <div className="bg-white rounded-lg border border-slate-200 p-4">
-          <h3 className="text-sm font-semibold text-red-600 mb-2">Missing Evidence</h3>
+          <h3 className="text-sm font-semibold text-red-600 mb-2">Proof Missing</h3>
           <ul className="space-y-1 text-sm text-slate-700">
             {(caseItem.missing_evidence || []).map((e) => (
               <li key={e}>- {EVIDENCE_LABELS[e] || e}</li>
@@ -143,7 +143,7 @@ export default function DisputePacket({ caseItem, onExport }) {
         <div className="flex items-center gap-2 mb-2">
           <Sparkles className="w-4 h-4 text-blue-600" />
           <h3 className="text-sm font-semibold text-slate-900">Merchant Response Draft</h3>
-          <span className="ml-auto text-[11px] text-slate-400">editable in Human Approval</span>
+          <span className="ml-auto text-[11px] text-slate-400">editable in Final Decision</span>
         </div>
         <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line bg-slate-50 rounded-md p-3 border border-slate-100">
           {caseItem.merchant_response_draft}

@@ -22,7 +22,7 @@ export default function PaymentTimeline({ caseItem }) {
   const events = caseItem.timeline_events || [];
   return (
     <div className="bg-white rounded-lg border border-slate-200 p-4">
-      <h3 className="text-sm font-semibold text-slate-900 mb-4">Payment Incident Timeline</h3>
+      <h3 className="text-sm font-semibold text-slate-900 mb-4">What Happened</h3>
       <ol className="relative border-l border-slate-200 ml-3 space-y-4">
         {events.map((ev, i) => {
           const s = STATUS[ev.status] || STATUS.ok;

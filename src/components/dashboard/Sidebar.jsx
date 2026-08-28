@@ -4,9 +4,9 @@ import { cn } from "@/lib/utils";
 
 const NAV = [
   { id: "overview", label: "Overview", icon: ShieldCheck },
-  { id: "risk-queue", label: "Risk Queue", icon: ListChecks },
-  { id: "metrics", label: "Metrics Dashboard", icon: BarChart3 },
-  { id: "audit-log", label: "Audit Log", icon: ScrollText },
+  { id: "risk-queue", label: "Action Queue", icon: ListChecks },
+  { id: "metrics", label: "Model & Impact", icon: BarChart3 },
+  { id: "audit-log", label: "Audit Trail", icon: ScrollText },
 ];
 
 export default function Sidebar({ active, onSelect, open, onClose }) {
@@ -58,7 +58,7 @@ export default function Sidebar({ active, onSelect, open, onClose }) {
         </nav>
 
         <div className="px-4 py-3 border-t border-slate-800 text-[11px] text-slate-500 leading-relaxed">
-          Human-reviewed actions | Evidence-first decisions.
+          Evidence-first dispute decisions. Human approval before action.
         </div>
       </aside>
     </>

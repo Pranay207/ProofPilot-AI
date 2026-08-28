@@ -9,11 +9,11 @@ import { cn } from "@/lib/utils";
 import { EVIDENCE_LABELS, getRequired, hasEvidence, riskTone, readinessTone, actionTone } from "@/lib/ruleEngine";
 
 const TABS = [
-  { id: "evidence-passport", label: "Evidence Passport" },
-  { id: "timeline", label: "Timeline" },
-  { id: "missing-proof", label: "Missing Proof Radar" },
-  { id: "dispute-packet", label: "Dispute Packet" },
-  { id: "human-approval", label: "Human Approval" },
+  { id: "evidence-passport", label: "Proof Checklist" },
+  { id: "timeline", label: "What Happened" },
+  { id: "missing-proof", label: "Missing Proof" },
+  { id: "dispute-packet", label: "Response Draft" },
+  { id: "human-approval", label: "Final Decision" },
 ];
 
 const toneClasses = {
@@ -53,7 +53,7 @@ function ScoreExplanation({ caseItem }) {
           Risk Score
         </div>
         <div className="mt-2 text-sm text-slate-700">
-          Model predicts <span className="font-semibold text-slate-900">{caseItem.model_probability ?? caseItem.risk_score}%</span> loss probability, then guardrails adjust for deadline and proof gaps.
+          Model predicts <span className="font-semibold text-slate-900">{caseItem.model_probability ?? caseItem.risk_score}%</span> chance of merchant loss, then rules adjust for deadline and missing proof.
         </div>
         <div className="mt-2 flex flex-wrap gap-1.5">
           {modelReasons.slice(0, 4).map((reason) => (
@@ -67,10 +67,10 @@ function ScoreExplanation({ caseItem }) {
       <div className="rounded-lg border border-slate-200 bg-white p-3">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
           <ClipboardCheck className="w-4 h-4 text-emerald-600" />
-          Evidence Readiness
+          Proof Readiness
         </div>
         <div className="mt-2 text-sm text-slate-700">
-          {present.length}/{required.length} required proofs are present for this dispute type.
+          {present.length}/{required.length} required proofs are present.
         </div>
         <div className="mt-2 text-[11px] text-slate-500">
           Missing: {missing.length ? missing.slice(0, 3).map((key) => EVIDENCE_LABELS[key] || key).join(", ") : "none"}
@@ -83,7 +83,7 @@ function ScoreExplanation({ caseItem }) {
           Confidence
         </div>
         <div className="mt-2 text-sm text-slate-700">
-          Confidence combines evidence coverage, payment IDs, complaint text, timeline depth, and dispute-specific rule match.
+          Confidence combines proof coverage, payment IDs, complaint text, timeline depth, and rule match.
         </div>
         <div className="mt-2 text-[11px] font-medium text-blue-700">Current confidence: {caseItem.confidence_score}%</div>
       </div>
@@ -107,8 +107,8 @@ function WorkflowProgress({ caseItem }) {
     <div className="rounded-lg border border-slate-200 bg-white p-3">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Case Workflow</h3>
-          <p className="mt-0.5 text-xs text-slate-500">Detector, verifier, responder, human approval, and audit export.</p>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recommended Path</h3>
+          <p className="mt-0.5 text-xs text-slate-500">Detect risk, check proof, draft response, approve, and export.</p>
         </div>
         <span className="rounded bg-slate-100 px-2 py-1 text-[11px] font-medium uppercase text-slate-600">{caseItem.packet_status || "draft"}</span>
       </div>
@@ -153,7 +153,7 @@ export default function CaseDetail({
   if (!caseItem) {
     return (
       <div className="bg-white rounded-lg border border-slate-200 p-10 text-center text-slate-500">
-        Select a case from the Risk Queue to view its evidence passport, timeline, and dispute packet.
+        Select a case from the Action Queue to see what happened, what proof is missing, and what action is safest.
       </div>
     );
   }
