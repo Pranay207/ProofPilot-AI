@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
-import { UploadCloud, CheckCircle2 } from "lucide-react";
+import React, { useRef, useState } from "react";
+import { UploadCloud, CheckCircle2, AlertCircle } from "lucide-react";
 
 export default function AttachProofButton({ onUploaded, disabled }) {
   const inputRef = useRef(null);
@@ -7,39 +7,50 @@ export default function AttachProofButton({ onUploaded, disabled }) {
   const [progress, setProgress] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [done, setDone] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleFile = (e) => {
+  const readAsDataUrl = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Could not read evidence file"));
+    reader.readAsDataURL(file);
+  });
+
+  const handleFile = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setError("");
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Max 5 MB");
+      e.target.value = "";
+      return;
+    }
     setFileName(file.name);
     setUploading(true);
-    setProgress(0);
+    setProgress(15);
     setDone(false);
+    try {
+      const contentBase64 = await readAsDataUrl(file);
+      setProgress(60);
+      await onUploaded?.({
+        fileName: file.name,
+        mimeType: file.type || "application/octet-stream",
+        size: file.size,
+        contentBase64,
+      });
+      setProgress(100);
+      setDone(true);
+      setTimeout(() => setDone(false), 900);
+    } catch (uploadError) {
+      setError(uploadError?.message || "Upload failed");
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
   };
 
-  useEffect(() => {
-    if (!uploading) return;
-    const id = setInterval(() => {
-      setProgress((p) => {
-        if (p >= 100) {
-          clearInterval(id);
-          setUploading(false);
-          setDone(true);
-          const name = fileName;
-          setTimeout(() => {
-            setDone(false);
-            onUploaded?.(name);
-          }, 400);
-          return 100;
-        }
-        return p + 14;
-      });
-    }, 95);
-    return () => clearInterval(id);
-  }, [uploading, fileName, onUploaded]);
-
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 min-h-8">
       <input
         ref={inputRef}
         type="file"
@@ -58,6 +69,10 @@ export default function AttachProofButton({ onUploaded, disabled }) {
       ) : done ? (
         <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600">
           <CheckCircle2 className="w-3.5 h-3.5" /> Uploaded
+        </span>
+      ) : error ? (
+        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-red-600" title={error}>
+          <AlertCircle className="w-3.5 h-3.5" /> {error}
         </span>
       ) : (
         <button

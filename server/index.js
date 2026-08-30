@@ -20,6 +20,9 @@ import {
   RAZORPAY_ALLOWED_WEBHOOK_EVENTS,
 } from "./services/webhookIdempotencyService.js";
 import { callRazorpay as requestRazorpay, getRazorpayConfig as readRazorpayConfig } from "./integrations/razorpayClient.js";
+import { findEvidenceUpload, readEvidenceUpload, saveEvidenceUpload } from "./services/evidenceService.js";
+import { acceptRazorpayDispute, contestRazorpayDispute, uploadRazorpayDocument } from "./integrations/razorpayClient.js";
+import { authenticateRequest } from "./middleware/auth.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -69,7 +72,8 @@ app.post("/api/webhooks/razorpay", express.raw({ type: "application/json" }), as
       return res.json({ ok: true, ignored: true, event: payload.event });
     }
 
-    const intake = await recordRazorpayWebhook(payload, req.body);
+    const webhookMerchant = await getWebhookMerchant();
+    const intake = await recordRazorpayWebhook(payload, req.body, webhookMerchant?.id);
     if (intake.duplicate) {
       return res.json({
         ok: true,
@@ -84,7 +88,7 @@ app.post("/api/webhooks/razorpay", express.raw({ type: "application/json" }), as
       });
     }
 
-    await upsertPaymentSignalFromWebhook(payload);
+    await upsertPaymentSignalFromWebhook(payload, webhookMerchant?.id);
 
     if (payload.event !== "payment.dispute.created") {
       return res.json({
@@ -115,7 +119,7 @@ app.post("/api/webhooks/razorpay", express.raw({ type: "application/json" }), as
   }
 });
 
-app.use(express.json());
+app.use(express.json({ limit: "6mb" }));
 
 async function getPrisma() {
   if (!useDatabase) return null;
@@ -124,6 +128,48 @@ async function getPrisma() {
   prisma = new PrismaClient();
   return prisma;
 }
+
+async function getWebhookMerchant() {
+  const db = await getPrisma();
+  if (!db) return null;
+  const authSubject = process.env.RAZORPAY_MERCHANT_AUTH_SUBJECT;
+  if (!authSubject) {
+    const error = new Error("RAZORPAY_MERCHANT_AUTH_SUBJECT is required for webhook routing");
+    error.status = 503;
+    throw error;
+  }
+  return db.merchant.upsert({
+    where: { authSubject },
+    update: {},
+    create: {
+      authSubject,
+      name: process.env.RAZORPAY_MERCHANT_NAME || "Razorpay Merchant",
+      email: process.env.RAZORPAY_MERCHANT_EMAIL || null,
+    },
+  });
+}
+
+async function attachMerchant(req) {
+  const db = await getPrisma();
+  if (!db) return null;
+  const merchant = await db.merchant.upsert({
+    where: { authSubject: req.auth.subject },
+    update: { name: req.auth.name, email: req.auth.email },
+    create: { authSubject: req.auth.subject, name: req.auth.name, email: req.auth.email },
+  });
+  req.merchant = merchant;
+  return merchant;
+}
+
+app.use("/api", async (req, _res, next) => {
+  try {
+    req.auth = await authenticateRequest(req);
+    await attachMerchant(req);
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
 
 function cleanText(value) {
   if (typeof value !== "string") return value;
@@ -167,6 +213,16 @@ function toFrontendCase(row) {
     case_summary: cleanText(row.caseSummary),
     available_evidence: evidence.filter((item) => item.status === "available").map((item) => item.key),
     missing_evidence: evidence.filter((item) => item.status === "missing").map((item) => item.key),
+    evidence_files: evidence.reduce((files, item) => {
+      if (item.fileName) {
+        files[item.key] = {
+          file_name: item.fileName,
+          uploaded_at: item.attachedAt?.toISOString?.() || item.attachedAt,
+          download_url: `/api/cases/${encodeURIComponent(row.caseId)}/evidence-files/${encodeURIComponent(item.key)}`,
+        };
+      }
+      return files;
+    }, {}),
     timeline_events: (row.timelineEvents || [])
       .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
       .map((item) => ({ event: cleanText(item.event), timestamp: item.timestamp, status: item.status, detail: cleanText(item.detail) })),
@@ -184,9 +240,9 @@ function toFrontendCase(row) {
   return scoreAndClassifyCase(item);
 }
 
-async function getCaseByParam(db, id) {
+async function getCaseByParam(db, id, merchantId) {
   return db.case.findFirst({
-    where: { OR: [{ id }, { caseId: id }] },
+    where: { OR: [{ id }, { caseId: id }], ...(merchantId ? { merchantId } : {}) },
     include: { evidenceItems: true, timelineEvents: true, auditLogs: true },
   });
 }
@@ -223,9 +279,9 @@ function extractWebhookIds(payload) {
   return readWebhookIds(payload);
 }
 
-async function recordRazorpayWebhook(payload, rawBody) {
+async function recordRazorpayWebhook(payload, rawBody, merchantId) {
   const db = await getPrisma();
-  return recordWebhookEvent({ db, payload, rawBody });
+  return recordWebhookEvent({ db, payload, rawBody, merchantId });
 }
 
 async function markWebhookCaseCreated(payload, rawBody, caseId) {
@@ -237,7 +293,7 @@ async function markWebhookCaseCreated(payload, rawBody, caseId) {
   });
 }
 
-async function upsertPaymentSignalFromWebhook(payload) {
+async function upsertPaymentSignalFromWebhook(payload, merchantId) {
   const payment = getWebhookEntity(payload, "payment");
   if (!payment?.id) return null;
 
@@ -261,7 +317,7 @@ async function upsertPaymentSignalFromWebhook(payload) {
   return db.paymentSignal.upsert({
     where: { providerPaymentId: payment.id },
     update: signal,
-    create: signal,
+    create: { ...signal, merchantId },
   });
 }
 
@@ -436,11 +492,7 @@ async function createCaseFromRazorpayDispute(payload) {
 
   const count = await db.case.count();
   const item = buildCasePayload(input, count);
-  const merchant = await db.merchant.upsert({
-    where: { email: "ops@kova-commerce.example" },
-    update: { name: "Kova Commerce Demo" },
-    create: { name: "Kova Commerce Demo", email: "ops@kova-commerce.example" },
-  });
+  const merchant = await getWebhookMerchant();
 
   const created = await db.case.create({
     data: {
@@ -554,6 +606,47 @@ function normalizeDispute(dispute) {
   };
 }
 
+const RAZORPAY_EVIDENCE_FIELDS = {
+  invoice: "billing_proof",
+  "payment receipt": "billing_proof",
+  "delivery proof": "shipping_proof",
+  "tracking snapshot": "shipping_proof",
+  "customer communication": "customer_communication",
+  "policy snapshot": "term_and_conditions",
+  "refund policy": "refund_cancellation_policy",
+  "refund confirmation": "refund_confirmation",
+  "authorization proof": "explanation_letter",
+  "risk check": "access_activity_log",
+  "device fingerprint": "access_activity_log",
+  "customer identity": "billing_proof",
+};
+
+async function buildRazorpayContestEvidence(caseRow, requestCaseId) {
+  const evidence = {};
+  const updates = [];
+  for (const item of caseRow.evidenceItems || []) {
+    if (item.status !== "available") continue;
+    let documentId = item.razorpayDocumentId;
+    if (!documentId) {
+      if (!item.storageKey || !item.fileName || !item.mimeType) continue;
+      const buffer = await readEvidenceUpload(requestCaseId, item.key, item.storageKey);
+      if (!buffer) continue;
+      const document = await uploadRazorpayDocument({ fileName: item.fileName, mimeType: item.mimeType, buffer });
+      documentId = document.id;
+      if (documentId) updates.push({ id: item.id, razorpayDocumentId: documentId });
+    }
+    if (!documentId) continue;
+    const field = RAZORPAY_EVIDENCE_FIELDS[item.key];
+    if (field) evidence[field] = [...new Set([...(evidence[field] || []), documentId])];
+  }
+  if (!Object.values(evidence).some((value) => value.length)) {
+    const error = new Error("At least one uploaded evidence document is required before Razorpay submission");
+    error.status = 422;
+    throw error;
+  }
+  return { evidence, updates };
+}
+
 app.get("/api/health", (_req, res) => {
   res.json({
     ok: true,
@@ -631,41 +724,60 @@ app.post("/api/ai/judgment/analyze", (req, res) => {
   });
 });
 
-async function loadFrontendCases() {
+async function loadFrontendCases(merchantId) {
   const db = await getPrisma();
   if (!db) return attachWorkflow(localCases);
   const rows = await db.case.findMany({
+    where: { merchantId },
     orderBy: [{ riskScore: "desc" }, { createdAt: "desc" }],
     include: { evidenceItems: true, timelineEvents: true, auditLogs: true },
   });
   return rows.map(toFrontendCase);
 }
 
-app.get("/api/metrics", async (_req, res, next) => {
+app.get("/api/metrics", async (req, res, next) => {
   try {
-    res.json(buildMetricsResponse(await loadFrontendCases()));
+    res.json(buildMetricsResponse(await loadFrontendCases(req.merchant?.id)));
   } catch (error) {
     next(error);
   }
 });
 
-app.get("/api/evaluation", async (_req, res, next) => {
+app.get("/api/evaluation", async (req, res, next) => {
   try {
-    res.json(buildEvaluationResponse(await loadFrontendCases()));
+    res.json(buildEvaluationResponse(await loadFrontendCases(req.merchant?.id)));
   } catch (error) {
     next(error);
   }
 });
 
-app.get("/api/cases", async (_req, res, next) => {
+app.get("/api/cases", async (req, res, next) => {
   try {
     const db = await getPrisma();
     if (!db) return res.json(attachWorkflow(localCases));
     const rows = await db.case.findMany({
+      where: { merchantId: req.merchant.id },
       orderBy: [{ riskScore: "desc" }, { createdAt: "desc" }],
       include: { evidenceItems: true, timelineEvents: true, auditLogs: true },
     });
     res.json(rows.map(toFrontendCase));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/cases/:id/evidence-files/:evidenceKey", async (req, res, next) => {
+  try {
+    const db = await getPrisma();
+    const caseRow = db ? await getCaseByParam(db, req.params.id, req.merchant?.id) : null;
+    const evidenceRow = caseRow?.evidenceItems?.find((item) => item.key === req.params.evidenceKey);
+    const upload = await findEvidenceUpload(req.params.id, req.params.evidenceKey, evidenceRow?.storageKey);
+    if (!upload) return res.status(404).json({ error: "Evidence file not found" });
+    if (upload.storage_provider === "s3") {
+      res.setHeader("Content-Type", evidenceRow?.mimeType || "application/octet-stream");
+      return upload.body.pipe(res);
+    }
+    res.download(upload.absolutePath, upload.file_name);
   } catch (error) {
     next(error);
   }
@@ -682,16 +794,11 @@ app.post("/api/cases", async (req, res, next) => {
 
     const count = await db.case.count();
     const item = buildCasePayload(req.body, count);
-    const merchant = await db.merchant.upsert({
-      where: { email: "ops@kova-commerce.example" },
-      update: { name: "Kova Commerce Demo" },
-      create: { name: "Kova Commerce Demo", email: "ops@kova-commerce.example" },
-    });
 
     const created = await db.case.create({
       data: {
         caseId: item.case_id,
-        merchantId: merchant.id,
+        merchantId: req.merchant.id,
         paymentId: item.payment_id,
         orderId: item.order_id,
         disputeId: item.dispute_id,
@@ -755,12 +862,23 @@ app.post("/api/cases", async (req, res, next) => {
 
 app.patch("/api/cases/:id/evidence", async (req, res, next) => {
   try {
-    const { evidenceKey, fileName } = req.body;
+    const { evidenceKey, fileName, mimeType, size, contentBase64 } = req.body;
     if (typeof evidenceKey !== "string" || !evidenceKey.trim()) {
       return res.status(400).json({ error: "A valid evidenceKey is required" });
     }
     if (fileName !== undefined && typeof fileName !== "string") {
       return res.status(400).json({ error: "fileName must be a string" });
+    }
+    let upload = null;
+    if (contentBase64) {
+      upload = await saveEvidenceUpload({
+        caseId: req.params.id,
+        evidenceKey,
+        fileName,
+        mimeType,
+        size,
+        contentBase64,
+      });
     }
     const db = await getPrisma();
     if (!db) {
@@ -768,27 +886,54 @@ app.patch("/api/cases/:id/evidence", async (req, res, next) => {
         if (caseItem.id !== req.params.id && caseItem.case_id !== req.params.id) return caseItem;
         const available = [...new Set([...(caseItem.available_evidence || []), evidenceKey])];
         const missing = (caseItem.missing_evidence || []).filter((item) => item !== evidenceKey);
-        const updated = { ...caseItem, available_evidence: available, missing_evidence: missing };
+        const updated = {
+          ...caseItem,
+          available_evidence: available,
+          missing_evidence: missing,
+          evidence_files: {
+            ...(caseItem.evidence_files || {}),
+            ...(upload ? { [evidenceKey]: upload } : {}),
+          },
+        };
         const scores = scoreCase(updated);
         return addAudit(
           { ...updated, ...scores },
           "Evidence Radar",
           "evidence_attached",
-          `Attached ${evidenceKey}${fileName ? ` (${fileName})` : ""}`,
+          `Attached ${evidenceKey}${upload?.file_name || fileName ? ` (${upload?.file_name || fileName})` : ""}`,
         );
       });
       return res.json(localCases.find((item) => item.id === req.params.id || item.case_id === req.params.id));
     }
 
-    const caseRow = await getCaseByParam(db, req.params.id);
+    const caseRow = await getCaseByParam(db, req.params.id, req.merchant.id);
     if (!caseRow) return res.status(404).json({ error: "Case not found" });
     await db.evidenceItem.upsert({
       where: { caseId_key: { caseId: caseRow.id, key: evidenceKey } },
-      update: { status: "available", fileName, attachedAt: new Date() },
-      create: { caseId: caseRow.id, key: evidenceKey, label: evidenceKey, status: "available", fileName, attachedAt: new Date() },
+      update: {
+        status: "available",
+        fileName: upload?.file_name || fileName || evidenceKey,
+        mimeType: upload?.mime_type || mimeType,
+        sizeBytes: upload?.size_bytes || size,
+        storageProvider: upload?.storage_provider,
+        storageKey: upload?.storage_key,
+        attachedAt: new Date(),
+      },
+      create: {
+        caseId: caseRow.id,
+        key: evidenceKey,
+        label: evidenceKey,
+        status: "available",
+        fileName: upload?.file_name || fileName || evidenceKey,
+        mimeType: upload?.mime_type || mimeType,
+        sizeBytes: upload?.size_bytes || size,
+        storageProvider: upload?.storage_provider,
+        storageKey: upload?.storage_key,
+        attachedAt: new Date(),
+      },
     });
 
-    const refreshed = await getCaseByParam(db, req.params.id);
+    const refreshed = await getCaseByParam(db, req.params.id, req.merchant.id);
     const mapped = toFrontendCase(refreshed);
     const scores = scoreCase(mapped);
     await db.case.update({
@@ -801,8 +946,8 @@ app.patch("/api/cases/:id/evidence", async (req, res, next) => {
         actionReason: scores.action_reason,
       },
     });
-    await db.auditLog.create({ data: { caseId: refreshed.id, actor: "Evidence Radar", action: "evidence_attached", detail: `Attached ${evidenceKey}` } });
-    const finalRow = await getCaseByParam(db, req.params.id);
+    await db.auditLog.create({ data: { caseId: refreshed.id, actor: "Evidence Radar", action: "evidence_attached", detail: `Attached ${evidenceKey}${upload?.file_name ? ` (${upload.file_name})` : ""}` } });
+    const finalRow = await getCaseByParam(db, req.params.id, req.merchant.id);
     res.json(toFrontendCase(finalRow));
   } catch (error) {
     next(error);
@@ -827,11 +972,11 @@ app.patch("/api/cases/:id/draft", async (req, res, next) => {
       return res.json(localCases.find((item) => item.id === req.params.id || item.case_id === req.params.id));
     }
 
-    const caseRow = await getCaseByParam(db, req.params.id);
+    const caseRow = await getCaseByParam(db, req.params.id, req.merchant.id);
     if (!caseRow) return res.status(404).json({ error: "Case not found" });
     await db.case.update({ where: { id: caseRow.id }, data: { merchantResponseDraft: draft } });
     await db.auditLog.create({ data: { caseId: caseRow.id, actor: "Human Reviewer", action: "edited", detail: "Merchant response draft edited by human" } });
-    const finalRow = await getCaseByParam(db, req.params.id);
+    const finalRow = await getCaseByParam(db, req.params.id, req.merchant.id);
     res.json(toFrontendCase(finalRow));
   } catch (error) {
     next(error);
@@ -854,13 +999,49 @@ app.patch("/api/cases/:id/decision", async (req, res, next) => {
       return res.json(localCases.find((item) => item.id === req.params.id || item.case_id === req.params.id));
     }
 
-    const caseRow = await getCaseByParam(db, req.params.id);
+    const caseRow = await getCaseByParam(db, req.params.id, req.merchant.id);
     if (!caseRow) return res.status(404).json({ error: "Case not found" });
     ensureContestHasEvidence(toFrontendCase(caseRow), status);
     await db.case.update({ where: { id: caseRow.id }, data: { packetStatus: status } });
     await db.auditLog.create({ data: { caseId: caseRow.id, actor: "Human Reviewer", action: status, detail: `Packet ${status}` } });
-    const finalRow = await getCaseByParam(db, req.params.id);
+    const finalRow = await getCaseByParam(db, req.params.id, req.merchant.id);
     res.json(toFrontendCase(finalRow));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/cases/:id/submit", async (req, res, next) => {
+  try {
+    const db = await getPrisma();
+    if (!db) return res.status(503).json({ error: "Razorpay submission requires PostgreSQL mode" });
+    const caseRow = await getCaseByParam(db, req.params.id, req.merchant.id);
+    if (!caseRow) return res.status(404).json({ error: "Case not found" });
+    if (caseRow.packetStatus !== "approved") {
+      return res.status(409).json({ error: "A packet must be approved before external submission" });
+    }
+
+    const action = req.body?.action || "contest";
+    let response;
+    if (action === "accept") {
+      response = await acceptRazorpayDispute(caseRow.disputeId);
+    } else if (action === "contest") {
+      const { evidence, updates } = await buildRazorpayContestEvidence(caseRow, req.params.id);
+      response = await contestRazorpayDispute(caseRow.disputeId, {
+        amount: caseRow.amountPaise,
+        summary: caseRow.merchantResponseDraft.slice(0, 1000),
+        ...evidence,
+      });
+      for (const update of updates) {
+        await db.evidenceItem.update({ where: { id: update.id }, data: { razorpayDocumentId: update.razorpayDocumentId } });
+      }
+    } else {
+      return res.status(400).json({ error: "Submission action must be contest or accept" });
+    }
+
+    await db.case.update({ where: { id: caseRow.id }, data: { packetStatus: action === "accept" ? "accepted" : "approved" } });
+    await db.auditLog.create({ data: { caseId: caseRow.id, actor: "Razorpay API", action: `dispute_${action}_submitted`, detail: `Submitted ${caseRow.disputeId} to Razorpay` } });
+    res.json({ ok: true, action, razorpay: response, case: toFrontendCase(await getCaseByParam(db, req.params.id, req.merchant.id)) });
   } catch (error) {
     next(error);
   }
@@ -877,7 +1058,7 @@ app.post("/api/cases/:id/export", async (req, res, next) => {
       return res.json(localCases.find((item) => item.id === req.params.id || item.case_id === req.params.id));
     }
 
-    const caseRow = await getCaseByParam(db, req.params.id);
+    const caseRow = await getCaseByParam(db, req.params.id, req.merchant.id);
     if (!caseRow) return res.status(404).json({ error: "Case not found" });
     await db.auditLog.create({
       data: {
@@ -887,7 +1068,7 @@ app.post("/api/cases/:id/export", async (req, res, next) => {
         detail: `Exported dispute packet for ${caseRow.orderId}`,
       },
     });
-    const finalRow = await getCaseByParam(db, req.params.id);
+    const finalRow = await getCaseByParam(db, req.params.id, req.merchant.id);
     res.json(toFrontendCase(finalRow));
   } catch (error) {
     next(error);
@@ -907,7 +1088,7 @@ app.delete("/api/cases/:id", async (req, res, next) => {
       return res.json({ deleted: true, id: caseItem.id, case_id: caseItem.case_id });
     }
 
-    const caseRow = await getCaseByParam(db, req.params.id);
+    const caseRow = await getCaseByParam(db, req.params.id, req.merchant.id);
     if (!caseRow) return res.status(404).json({ error: "Case not found" });
     if (!isManualCase(caseRow)) {
       return res.status(403).json({ error: "Only manually added test cases can be deleted" });
@@ -943,6 +1124,24 @@ app.use((error, _req, res, _next) => {
   if (status >= 500 && process.env.NODE_ENV !== "production") payload.detail = error.message;
   res.status(status).json(payload);
 });
+
+if (process.env.NODE_ENV === "production") {
+  const requiredProductionConfig = [
+    ["USE_DATABASE", useDatabase],
+    ["AUTH_JWKS_URL", process.env.AUTH_JWKS_URL],
+    ["AUTH_ISSUER", process.env.AUTH_ISSUER],
+    ["AUTH_AUDIENCE", process.env.AUTH_AUDIENCE],
+    ["EVIDENCE_S3_BUCKET", process.env.EVIDENCE_S3_BUCKET],
+    ["AWS_REGION", process.env.AWS_REGION],
+    ["RAZORPAY_KEY_ID", process.env.RAZORPAY_KEY_ID],
+    ["RAZORPAY_KEY_SECRET", process.env.RAZORPAY_KEY_SECRET],
+    ["RAZORPAY_WEBHOOK_SECRET", process.env.RAZORPAY_WEBHOOK_SECRET],
+    ["RAZORPAY_MERCHANT_AUTH_SUBJECT", process.env.RAZORPAY_MERCHANT_AUTH_SUBJECT],
+  ].filter(([, value]) => !value).map(([name]) => name);
+  if (requiredProductionConfig.length) {
+    throw new Error(`Missing production configuration: ${requiredProductionConfig.join(", ")}`);
+  }
+}
 
 app.listen(port, () => {
   console.log(`ProofPilot API running on http://localhost:${port} (${useDatabase ? "postgres" : "local sample data"})`);

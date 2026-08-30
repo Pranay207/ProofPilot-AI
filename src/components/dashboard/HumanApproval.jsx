@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { CheckCircle2, Pencil, AlertTriangle, XCircle, Lock } from "lucide-react";
+import { CheckCircle2, Pencil, AlertTriangle, XCircle, Lock, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const STATUS_TONE = {
@@ -28,7 +28,7 @@ const OUTCOME_COPY = {
   },
 };
 
-export default function HumanApproval({ caseItem, onApprove, onEscalate, onAccept, onEditDraft }) {
+export default function HumanApproval({ caseItem, onApprove, onEscalate, onAccept, onSubmit, onEditDraft }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(caseItem?.merchant_response_draft || "");
 
@@ -129,6 +129,15 @@ export default function HumanApproval({ caseItem, onApprove, onEscalate, onAccep
           <p className="mt-3 text-xs text-slate-500">
             Packet is <span className="font-semibold uppercase">{status}</span>. This decision is recorded in the audit log.
           </p>
+        )}
+        {status === "approved" && (
+          <button
+            type="button"
+            onClick={onSubmit}
+            className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+          >
+            <Send className="h-3.5 w-3.5" /> Submit contest to Razorpay
+          </button>
         )}
       </div>
 

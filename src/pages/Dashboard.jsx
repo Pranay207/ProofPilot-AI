@@ -30,6 +30,8 @@ import { SAMPLE_CASES } from "@/lib/sampleData";
 import { actionTone, scoreCase, EVIDENCE_LABELS, getRequired } from "@/lib/ruleEngine";
 import { calculateProofPilotMetrics, formatMoney } from "@/lib/metrics";
 import { fetchBackendMetrics } from "@/lib/metricsApi";
+import { apiFetch } from "@/lib/apiClient";
+import { useAuth } from "@/lib/AuthContext";
 
 const CASE_SECTIONS = ["evidence-passport", "timeline", "missing-proof", "dispute-packet", "human-approval"];
 const PAGE_TITLES = {
@@ -703,6 +705,7 @@ function NewCaseModal({ open, onClose, onSubmit }) {
   );
 }
 export default function Dashboard() {
+  const { user, logout } = useAuth();
   const [cases, setCases] = useState(() => SAMPLE_CASES.map((item) => ({ ...item, id: item.case_id })));
   const [active, setActive] = useState("overview");
   const [caseTab, setCaseTab] = useState("evidence-passport");
@@ -735,7 +738,7 @@ export default function Dashboard() {
     let cancelled = false;
     setDataLoading(true);
     setDataError("");
-    fetch("/api/cases")
+    apiFetch("/api/cases")
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error("API unavailable"))))
       .then((rows) => {
         if (cancelled || !Array.isArray(rows)) return;
@@ -760,7 +763,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/integrations/razorpay/status")
+    apiFetch("/api/integrations/razorpay/status")
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Razorpay status unavailable"))))
       .then((status) => {
         if (!cancelled) setRazorpayStatus(status);
@@ -811,8 +814,9 @@ export default function Dashboard() {
     setCases((prev) => prev.map((c) => (c.id === nextCase.id || c.case_id === nextCase.case_id ? nextCase : c)));
   };
 
-  const handleAttach = async (evidenceKey, fileName) => {
+  const handleAttach = async (evidenceKey, uploadPayload = {}) => {
     if (!selected) return;
+    const fileName = uploadPayload.fileName || uploadPayload.file_name || "";
     const available = [...new Set([...(selected.available_evidence || []), evidenceKey])];
     const missing = (selected.missing_evidence || []).filter((e) => e !== evidenceKey);
     const scores = scoreCase({ ...selected, available_evidence: available, missing_evidence: missing });
@@ -829,24 +833,39 @@ export default function Dashboard() {
       audit_log: [...(selected.audit_log || []), audit],
     };
     if (fileName) {
-      setAttachments((prev) => ({ ...prev, [selected.id]: { ...(prev[selected.id] || {}), [evidenceKey]: fileName } }));
+      setAttachments((prev) => ({
+        ...prev,
+        [selected.id]: {
+          ...(prev[selected.id] || {}),
+          [evidenceKey]: { file_name: fileName, uploaded_at: new Date().toISOString() },
+        },
+      }));
     }
     setRecentlyAttached((prev) => [...prev, evidenceKey]);
     updateCase(selected.id, patch);
 
     try {
-      const res = await fetch(`/api/cases/${selected.id}/evidence`, {
+      const res = await apiFetch(`/api/cases/${selected.id}/evidence`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ evidenceKey, fileName }),
+        body: JSON.stringify({
+          evidenceKey,
+          fileName,
+          mimeType: uploadPayload.mimeType,
+          size: uploadPayload.size,
+          contentBase64: uploadPayload.contentBase64,
+        }),
       });
-      if (res.ok) {
-        const nextCase = await res.json();
-        replaceCase(nextCase);
-        await refreshMetrics();
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        throw new Error(payload.error || "Evidence upload failed");
       }
+      const nextCase = await res.json();
+      replaceCase(nextCase);
+      await refreshMetrics();
     } catch {
       setDataSource("sample workspace");
+      setDataError("Evidence upload could not be saved to the backend. The local case view was updated only for this session.");
     }
   };
 
@@ -863,7 +882,7 @@ export default function Dashboard() {
     const auditLog = addAudit(actionLabel, `Packet ${status} for ${selected.order_id}`);
     updateCase(selected.id, { packet_status: status, audit_log: auditLog });
     try {
-      const res = await fetch(`/api/cases/${selected.id}/decision`, {
+      const res = await apiFetch(`/api/cases/${selected.id}/decision`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
@@ -883,7 +902,7 @@ export default function Dashboard() {
     const auditLog = addAudit("edited", "Merchant response draft edited by human");
     updateCase(selected.id, { merchant_response_draft: newDraft, audit_log: auditLog });
     try {
-      const res = await fetch(`/api/cases/${selected.id}/draft`, {
+      const res = await apiFetch(`/api/cases/${selected.id}/draft`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ draft: newDraft }),
@@ -903,7 +922,7 @@ export default function Dashboard() {
     const auditLog = addAudit("packet_exported", `Exported response packet for ${selected.order_id}`);
     updateCase(selected.id, { audit_log: auditLog });
     try {
-      const res = await fetch(`/api/cases/${selected.id}/export`, {
+      const res = await apiFetch(`/api/cases/${selected.id}/export`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
@@ -918,13 +937,30 @@ export default function Dashboard() {
     }
   };
 
+  const handleSubmitToRazorpay = async () => {
+    if (!selected || selected.packet_status !== "approved") return;
+    try {
+      const res = await apiFetch(`/api/cases/${selected.id}/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "contest" }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload.error || "Razorpay submission failed");
+      replaceCase(payload.case);
+      await refreshMetrics();
+    } catch (error) {
+      setDataError(error.message || "Razorpay submission failed");
+    }
+  };
+
   const handleDeleteCase = async () => {
     if (!selected || !isManualCase(selected)) return;
     const confirmed = window.confirm(`Delete ${selected.case_id}? This removes the case, evidence, timeline, and audit records.`);
     if (!confirmed) return;
 
     try {
-      const res = await fetch(`/api/cases/${selected.id}`, { method: "DELETE" });
+      const res = await apiFetch(`/api/cases/${selected.id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Delete failed");
       setCases((prev) => {
         const nextCases = prev.filter((item) => item.id !== selected.id && item.case_id !== selected.case_id);
@@ -948,7 +984,7 @@ export default function Dashboard() {
 
   const handleCreateCase = async (input) => {
     try {
-      const res = await fetch("/api/cases", {
+      const res = await apiFetch("/api/cases", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
@@ -979,10 +1015,11 @@ export default function Dashboard() {
       onTabChange={setCaseTab}
       onAttach={handleAttach}
       recentlyAttached={recentlyAttached}
-      attachments={attachments[selected.id]}
+      attachments={{ ...(selected.evidence_files || {}), ...(attachments[selected.id] || {}) }}
       onApprove={() => handleDecision("approved", "approved")}
       onEscalate={() => handleDecision("escalated", "escalated")}
       onAccept={() => handleDecision("accepted", "accepted")}
+      onSubmit={handleSubmitToRazorpay}
       onEditDraft={handleEditDraft}
       onExportPacket={handleExportPacket}
       onDelete={handleDeleteCase}
@@ -1005,8 +1042,20 @@ export default function Dashboard() {
               <h1 className="text-sm font-semibold text-slate-900">{PAGE_TITLES[active] || active.replace(/-/g, " ")}</h1>
             </div>
           </div>
-          <div className="text-xs font-medium text-slate-500 hidden sm:block">
-            Merchant Risk Workspace
+          <div className="flex items-center gap-3">
+            <div className="hidden text-xs font-medium text-slate-500 sm:block">
+              Merchant Risk Workspace
+            </div>
+            <button
+              type="button"
+              onClick={logout}
+              className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+            >
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-[10px] font-semibold text-white">
+                {user?.name ? user.name.trim().charAt(0).toUpperCase() : "M"}
+              </span>
+              Log out
+            </button>
           </div>
         </header>
 

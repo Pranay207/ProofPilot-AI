@@ -163,6 +163,7 @@ export default function CaseDetail({
   onApprove,
   onEscalate,
   onAccept,
+  onSubmit,
   onEditDraft,
   onExportPacket,
   onDelete,
@@ -276,6 +277,7 @@ export default function CaseDetail({
             onApprove={onApprove}
             onEscalate={onEscalate}
             onAccept={onAccept}
+            onSubmit={onSubmit}
             onEditDraft={onEditDraft}
           />
         )}

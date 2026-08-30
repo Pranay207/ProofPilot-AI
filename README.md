@@ -113,6 +113,12 @@ Returns the judge-facing proof:
 - Signature-protected Razorpay webhook receiver
 - Exportable dispute packet JSON
 
+## Production Configuration
+
+Production startup fails closed unless PostgreSQL, OIDC/JWT verification, S3 evidence storage, Razorpay credentials, and an explicit webhook merchant subject are configured. Run `npx prisma migrate deploy` before starting the API.
+
+The dashboard expects the hosting application to provide the verified OIDC access token as `window.__PROOFPILOT_AUTH_TOKEN__` (or `proofpilot_access_token` in local storage). Every case query is scoped to that token's merchant subject. A reviewer can approve a packet and submit it to Razorpay through the official contest API; attached files are uploaded to Razorpay's Documents API first.
+
 ## Local Run
 
 ```bash

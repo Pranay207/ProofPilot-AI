@@ -7,6 +7,7 @@ const prisma = new PrismaClient();
 const merchant = {
   name: "Kova Commerce Demo",
   email: "ops@kova-commerce.example",
+  authSubject: "dev-merchant",
 };
 
 function toDate(value) {

@@ -43,7 +43,7 @@ export function toWebhookAuditShape(row) {
   };
 }
 
-export async function recordWebhookEvent({ db, payload, rawBody }) {
+export async function recordWebhookEvent({ db, payload, rawBody, merchantId }) {
   const ids = extractWebhookIds(payload);
   const payloadHash = getPayloadHash(rawBody);
 
@@ -73,6 +73,7 @@ export async function recordWebhookEvent({ db, payload, rawBody }) {
   const saved = await db.webhookEvent.create({
     data: {
       event: payload.event || "unknown",
+      merchantId,
       eventFingerprint: payloadHash,
       paymentId: ids.paymentId,
       disputeId: ids.disputeId,

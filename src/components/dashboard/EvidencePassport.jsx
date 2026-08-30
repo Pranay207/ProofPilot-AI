@@ -12,6 +12,32 @@ function Field({ label, value, mono }) {
   );
 }
 
+function EvidenceFileMeta({ file }) {
+  if (!file) return null;
+  const fileName = typeof file === "string" ? file : file.file_name;
+  const uploadedAt = typeof file === "object" && file.uploaded_at
+    ? new Date(file.uploaded_at).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+    : "";
+  const content = (
+    <>
+      <Paperclip className="w-3 h-3" /> {fileName}
+      {uploadedAt ? <span className="text-slate-300">| {uploadedAt}</span> : null}
+    </>
+  );
+  if (typeof file === "object" && file.download_url) {
+    return (
+      <a href={file.download_url} className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-700 truncate max-w-[240px]">
+        {content}
+      </a>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] text-slate-400 truncate max-w-[240px]">
+      {content}
+    </span>
+  );
+}
+
 export default function EvidencePassport({ caseItem, onAttach, attachments }) {
   if (!caseItem) return null;
   return (
@@ -65,11 +91,7 @@ export default function EvidencePassport({ caseItem, onAttach, attachments }) {
                 <li key={e} className="flex items-center gap-2 text-sm">
                   <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
                   <span className="text-slate-700">{EVIDENCE_LABELS[e] || e}</span>
-                  {attachments?.[e] && (
-                    <span className="inline-flex items-center gap-1 text-[11px] text-slate-400 truncate max-w-[140px]">
-                      <Paperclip className="w-3 h-3" /> {attachments[e]}
-                    </span>
-                  )}
+                  <EvidenceFileMeta file={attachments?.[e]} />
                 </li>
               ))}
             </ul>

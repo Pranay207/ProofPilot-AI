@@ -30,15 +30,20 @@ enum RecommendedAction {
 }
 
 model Merchant {
-  id        String   @id @default(cuid())
-  name      String
-  email     String?  @unique
-  createdAt DateTime @default(now())
-  cases     Case[]
+  id            String   @id @default(cuid())
+  name          String
+  email         String?  @unique
+  authSubject    String   @unique
+  razorpayKeyId String?
+  createdAt     DateTime @default(now())
+  cases         Case[]
+  paymentSignals PaymentSignal[]
+  webhookEvents  WebhookEvent[]
 }
 
 model PaymentSignal {
   id                    String   @id @default(cuid())
+  merchantId            String
   provider              String   @default("razorpay")
   providerPaymentId     String   @unique
   orderId               String?
@@ -54,12 +59,15 @@ model PaymentSignal {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
   @@index([status])
   @@index([orderId])
 }
 
 model WebhookEvent {
   id                    String   @id @default(cuid())
+  merchantId            String
   provider              String   @default("razorpay")
   event                 String
   eventFingerprint      String   @unique
@@ -70,6 +78,8 @@ model WebhookEvent {
   status                String   @default("received")
   payload               Json?
   receivedAt            DateTime @default(now())
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
 
   @@index([event])
   @@index([paymentId])
@@ -122,14 +132,19 @@ model Case {
 }
 
 model EvidenceItem {
-  id         String   @id @default(cuid())
-  caseId     String
-  key        String
-  label      String
-  status     String
-  fileName   String?
-  attachedAt DateTime?
-  createdAt  DateTime @default(now())
+  id                 String   @id @default(cuid())
+  caseId             String
+  key                String
+  label              String
+  status             String
+  fileName           String?
+  mimeType           String?
+  sizeBytes          Int?
+  storageProvider    String?
+  storageKey         String?
+  razorpayDocumentId String?
+  attachedAt         DateTime?
+  createdAt          DateTime @default(now())
 
   case Case @relation(fields: [caseId], references: [id], onDelete: Cascade)
 
