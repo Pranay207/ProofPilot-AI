@@ -1,11 +1,12 @@
 import React from "react";
-import { ShieldCheck, ListChecks, BarChart3, ScrollText, X } from "lucide-react";
+import { ShieldCheck, ListChecks, BarChart3, ScrollText, X, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV = [
   { id: "overview", label: "Overview", icon: ShieldCheck },
   { id: "risk-queue", label: "Action Queue", icon: ListChecks },
   { id: "metrics", label: "Model & Impact", icon: BarChart3 },
+  { id: "reliability", label: "Reliability", icon: RefreshCw },
   { id: "audit-log", label: "Audit Trail", icon: ScrollText },
 ];
 

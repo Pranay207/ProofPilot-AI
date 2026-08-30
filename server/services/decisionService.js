@@ -12,7 +12,7 @@ export function validateDecisionStatus(status) {
 }
 
 export function ensureContestHasEvidence(caseItem, status) {
-  const isContestApproval = status === "approved" && caseItem.recommended_action === "contest";
+  const isContestApproval = status === "approved";
   if (isContestApproval && Number(caseItem.readiness_score || 0) < 80) {
     const error = new Error("Contest approval blocked until required proof is attached or reviewer escalates.");
     error.status = 409;

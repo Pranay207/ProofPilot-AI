@@ -26,6 +26,7 @@ import CaseDetail from "@/components/dashboard/CaseDetail";
 import MetricsDashboard from "@/components/dashboard/MetricsDashboard";
 import AuditLogView from "@/components/dashboard/AuditLogView";
 import AnimatedValue from "@/components/dashboard/AnimatedValue";
+import ReliabilityDashboard from "@/components/dashboard/ReliabilityDashboard";
 import { SAMPLE_CASES } from "@/lib/sampleData";
 import { actionTone, scoreCase, EVIDENCE_LABELS, getRequired } from "@/lib/ruleEngine";
 import { calculateProofPilotMetrics, formatMoney } from "@/lib/metrics";
@@ -38,6 +39,7 @@ const PAGE_TITLES = {
   overview: "Overview",
   "risk-queue": "Action Queue",
   metrics: "Model & Impact",
+  reliability: "System Reliability",
   "audit-log": "Audit Trail",
 };
 
@@ -1074,6 +1076,8 @@ export default function Dashboard() {
             />
           ) : active === "metrics" ? (
             <MetricsDashboard cases={cases} metrics={backendMetrics} />
+          ) : active === "reliability" ? (
+            <ReliabilityDashboard />
           ) : active === "audit-log" ? (
             <AuditLogView cases={cases} />
           ) : queuePage ? (

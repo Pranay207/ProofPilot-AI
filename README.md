@@ -106,6 +106,22 @@ Returns the judge-facing proof:
 - live merchant impact metrics
 - failure recovery behavior
 
+```text
+GET /api/reliability
+```
+
+Returns operational guardrail checks for webhook signature gating, duplicate webhook handling, AI fallback, missing-evidence approval blocking, evidence storage mode, human approval, and external submission control. The dashboard exposes the same proof in the **Reliability** tab.
+
+## Verification
+
+```bash
+npm run lint
+npm test
+npm run build
+```
+
+The integration tests exercise invalid webhook signatures, duplicate Razorpay webhooks, missing-proof approval blocking, evidence upload/download, malformed AI output fallback, and AI timeout fallback.
+
 ## Integrations
 
 - PostgreSQL case store for payment signals, webhook events, cases, evidence, timeline, and audit logs
