@@ -162,6 +162,15 @@ async function attachMerchant(req) {
   return merchant;
 }
 
+app.get("/api/health", (_req, res) => {
+  res.json({
+    ok: true,
+    mode: useDatabase ? "postgres" : "local-sample-data",
+    product: "ProofPilot AI",
+    workflow: "signed webhook -> risk score -> proof checklist -> response draft -> human decision -> audit trail",
+  });
+});
+
 app.use("/api", async (req, _res, next) => {
   try {
     req.auth = await authenticateRequest(req);
@@ -695,15 +704,6 @@ async function buildRazorpayContestEvidence(caseRow, requestCaseId) {
   }
   return { evidence, updates };
 }
-
-app.get("/api/health", (_req, res) => {
-  res.json({
-    ok: true,
-    mode: useDatabase ? "postgres" : "local-sample-data",
-    product: "ProofPilot AI",
-    workflow: "signed webhook -> risk score -> proof checklist -> response draft -> human decision -> audit trail",
-  });
-});
 
 registerArchitectureRoutes(app);
 
