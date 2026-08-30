@@ -120,12 +120,12 @@ export async function saveEvidenceUpload({ caseId, evidenceKey, fileName, mimeTy
   };
 }
 
-export async function findEvidenceUpload(caseId, evidenceKey, storedKey) {
+export async function findEvidenceUpload(caseId, evidenceKey, storedKey, preferredFileName) {
   if (storageProvider === "s3" && storedKey) {
     const response = await s3Client.send(new GetObjectCommand({ Bucket: s3Bucket, Key: storedKey }));
     return {
       body: response.Body,
-      file_name: path.basename(storedKey).split("-").slice(2).join("-") || storedKey,
+      file_name: preferredFileName || path.basename(storedKey),
       size_bytes: response.ContentLength,
       uploaded_at: response.LastModified?.toISOString?.(),
       storage_provider: "s3",
@@ -134,19 +134,35 @@ export async function findEvidenceUpload(caseId, evidenceKey, storedKey) {
   const safeCaseId = safeSegment(caseId);
   const safeEvidenceKey = safeSegment(evidenceKey);
   const caseDir = path.join(UPLOAD_ROOT, safeCaseId);
+  if (storedKey) {
+    const storedName = path.basename(storedKey);
+    const absolutePath = path.join(caseDir, storedName);
+    const stat = await fs.stat(absolutePath).catch(() => null);
+    if (stat) {
+      return {
+        absolutePath,
+        file_name: preferredFileName || storedName,
+        size_bytes: stat.size,
+        uploaded_at: stat.mtime.toISOString(),
+        storage_provider: "local",
+      };
+    }
+  }
   const entries = await fs.readdir(caseDir).catch(() => []);
-  const matching = entries
+  const matching = await Promise.all(entries
     .filter((entry) => entry.startsWith(`${safeEvidenceKey}-`))
-    .sort()
-    .reverse();
+    .map(async (entry) => {
+      const absolutePath = path.join(caseDir, entry);
+      const stat = await fs.stat(absolutePath);
+      return { entry, stat };
+    }));
+  matching.sort((a, b) => b.stat.mtimeMs - a.stat.mtimeMs);
   if (!matching.length) return null;
-  const storedName = matching[0];
+  const { entry: storedName, stat } = matching[0];
   const absolutePath = path.join(caseDir, storedName);
-  const stat = await fs.stat(absolutePath);
-  const originalName = storedName.split("-").slice(3).join("-") || storedName;
   return {
     absolutePath,
-    file_name: originalName,
+    file_name: preferredFileName || storedName,
     size_bytes: stat.size,
     uploaded_at: stat.mtime.toISOString(),
     storage_provider: "local",

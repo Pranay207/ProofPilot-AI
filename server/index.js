@@ -770,8 +770,15 @@ app.get("/api/cases/:id/evidence-files/:evidenceKey", async (req, res, next) => 
   try {
     const db = await getPrisma();
     const caseRow = db ? await getCaseByParam(db, req.params.id, req.merchant?.id) : null;
+    const localCase = db ? null : localCases.find((item) => item.id === req.params.id || item.case_id === req.params.id);
     const evidenceRow = caseRow?.evidenceItems?.find((item) => item.key === req.params.evidenceKey);
-    const upload = await findEvidenceUpload(req.params.id, req.params.evidenceKey, evidenceRow?.storageKey);
+    const localEvidenceFile = localCase?.evidence_files?.[req.params.evidenceKey];
+    const upload = await findEvidenceUpload(
+      req.params.id,
+      req.params.evidenceKey,
+      evidenceRow?.storageKey || localEvidenceFile?.storage_key,
+      evidenceRow?.fileName || localEvidenceFile?.file_name,
+    );
     if (!upload) return res.status(404).json({ error: "Evidence file not found" });
     if (upload.storage_provider === "s3") {
       res.setHeader("Content-Type", evidenceRow?.mimeType || "application/octet-stream");
