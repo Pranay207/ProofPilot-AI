@@ -4,24 +4,19 @@ import {
   ArrowRight,
   CheckCircle2,
   Database,
-  ExternalLink,
   FileCheck2,
   IndianRupee,
-  KeyRound,
   Loader2,
   Menu,
   MessageSquare,
   PackageCheck,
-  PlugZap,
   PlusCircle,
   Radar,
-  RefreshCw,
   ShieldCheck,
   Sparkles,
   TrendingUp,
   UploadCloud,
   UserCheck,
-  Webhook,
   X,
 } from "lucide-react";
 import Sidebar from "@/components/dashboard/Sidebar";
@@ -335,15 +330,7 @@ function TrackFitPanel() {
   );
 }
 
-function getDefaultWebhookUrl(status) {
-  if (status?.webhook_url) return status.webhook_url;
-  if (typeof window === "undefined") return "/api/webhooks/razorpay";
-  const isLocal = ["localhost", "127.0.0.1"].includes(window.location.hostname);
-  const origin = isLocal ? "https://proofpilot-ai.onrender.com" : window.location.origin;
-  return `${origin}/api/webhooks/razorpay`;
-}
-
-function DataStatusStrip({ dataSource, loading, error, lastSynced, razorpayStatus, onConnectRazorpay, onSyncRazorpay, syncingRazorpay }) {
+function DataStatusStrip({ dataSource, loading, error, lastSynced, razorpayStatus }) {
   const connected = !loading && !error && dataSource === "secure case store";
   const razorpayConnected = Boolean(razorpayStatus?.configured);
   const sources = [
@@ -370,25 +357,6 @@ function DataStatusStrip({ dataSource, loading, error, lastSynced, razorpayStatu
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2 lg:order-3">
-          <button
-            type="button"
-            onClick={onConnectRazorpay}
-            className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
-          >
-            <PlugZap className="h-3.5 w-3.5" />
-            Connect Razorpay
-          </button>
-          <button
-            type="button"
-            onClick={onSyncRazorpay}
-            disabled={!razorpayConnected || syncingRazorpay}
-            className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {syncingRazorpay ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-            Sync disputes
-          </button>
-        </div>
         <div className="grid gap-2 sm:grid-cols-5 lg:min-w-[720px]">
           {sources.map((source) => {
             const Icon = source.icon;
@@ -408,95 +376,7 @@ function DataStatusStrip({ dataSource, loading, error, lastSynced, razorpayStatu
   );
 }
 
-function RazorpayConnectModal({ open, onClose, razorpayStatus, onSyncRazorpay, syncingRazorpay, syncMessage }) {
-  if (!open) return null;
-  const configured = Boolean(razorpayStatus?.configured);
-  const webhookConfigured = Boolean(razorpayStatus?.webhook_secret_configured);
-  const mode = razorpayStatus?.mode || "unknown";
-  const webhookUrl = getDefaultWebhookUrl(razorpayStatus);
-  const items = [
-    { icon: KeyRound, label: "API credentials", value: configured ? `${mode} mode active` : "Not connected", ok: configured },
-    { icon: Webhook, label: "Webhook endpoint", value: webhookUrl, ok: true },
-    { icon: ShieldCheck, label: "Webhook security", value: webhookConfigured ? "Signature verification enabled" : "Secret not configured", ok: webhookConfigured },
-    { icon: Radar, label: "Event intake", value: razorpayStatus?.required_event || "payment.dispute.created", ok: true },
-  ];
-
-  return (
-    <div className="fixed inset-0 z-50">
-      <button className="absolute inset-0 bg-slate-950/35" onClick={onClose} aria-label="Close Razorpay setup" />
-      <div className="absolute left-1/2 top-1/2 w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 rounded-lg border border-slate-200 bg-white shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-md border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-              <PlugZap className="h-3.5 w-3.5" />
-              Razorpay Integration
-            </div>
-            <h2 className="mt-3 text-lg font-semibold text-slate-950">Connect Razorpay</h2>
-            <p className="mt-1 text-sm leading-relaxed text-slate-500">
-              ProofPilot connects to Razorpay with secure server-side credentials. Signed dispute webhooks create cases automatically, and manual sync can backfill missed or existing disputes.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="space-y-4 p-5">
-          <div className="grid gap-3 sm:grid-cols-2">
-            {items.map((item) => {
-              const Icon = item.icon;
-              return (
-                <div key={item.label} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    <Icon className={`h-4 w-4 ${item.ok ? "text-emerald-600" : "text-amber-600"}`} />
-                    {item.label}
-                  </div>
-                  <div className="mt-2 break-all text-sm font-medium text-slate-900">{item.value}</div>
-                </div>
-              );
-            })}
-          </div>
-          <div className="rounded-lg border border-slate-200 bg-white p-4">
-            <h3 className="text-sm font-semibold text-slate-900">Connection checklist</h3>
-            <div className="mt-3 grid gap-2 text-sm text-slate-600">
-              <div>1. Store Razorpay API keys in the server environment.</div>
-              <div>2. Add the webhook endpoint in Razorpay Dashboard.</div>
-              <div>3. Enable <span className="font-mono text-slate-900">payment.dispute.created</span> for dispute intake.</div>
-              <div>4. Run manual sync to backfill disputes or recover from webhook delivery issues.</div>
-            </div>
-          </div>
-          {syncMessage ? (
-            <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">{syncMessage}</div>
-          ) : null}
-          <div className="flex flex-wrap justify-end gap-2">
-            <a
-              href="/api/integrations/razorpay/status"
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              Check status <ExternalLink className="h-3.5 w-3.5" />
-            </a>
-            <button
-              type="button"
-              onClick={onSyncRazorpay}
-              disabled={!configured || syncingRazorpay}
-              className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {syncingRazorpay ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-              Sync disputes now
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function OverviewHome({ cases, metrics, onSelectCase, onNavigate, dataSource, loading, error, lastSynced, razorpayStatus, onConnectRazorpay, onSyncRazorpay, syncingRazorpay }) {
+function OverviewHome({ cases, metrics, onSelectCase, onNavigate, dataSource, loading, error, lastSynced, razorpayStatus }) {
 
   return (
     <div className="space-y-4">
@@ -506,9 +386,6 @@ function OverviewHome({ cases, metrics, onSelectCase, onNavigate, dataSource, lo
         error={error}
         lastSynced={lastSynced}
         razorpayStatus={razorpayStatus}
-        onConnectRazorpay={onConnectRazorpay}
-        onSyncRazorpay={onSyncRazorpay}
-        syncingRazorpay={syncingRazorpay}
       />
 
       <section className="rounded-lg border border-slate-200 bg-white p-5">
@@ -525,9 +402,6 @@ function OverviewHome({ cases, metrics, onSelectCase, onNavigate, dataSource, lo
             <div className="mt-4 flex flex-wrap gap-2">
               <button onClick={() => onNavigate("risk-queue")} className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-2 text-xs font-medium text-white hover:bg-slate-800">
                 Open action queue <ArrowRight className="h-3.5 w-3.5" />
-              </button>
-              <button onClick={onConnectRazorpay} className="inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 hover:bg-emerald-100">
-                <PlugZap className="h-3.5 w-3.5" /> Razorpay setup
               </button>
               <button onClick={() => onNavigate("metrics")} className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">
                 View model impact
@@ -804,9 +678,6 @@ export default function Dashboard() {
   const [dataError, setDataError] = useState("");
   const [lastSynced, setLastSynced] = useState(null);
   const [razorpayStatus, setRazorpayStatus] = useState(null);
-  const [razorpaySetupOpen, setRazorpaySetupOpen] = useState(false);
-  const [razorpaySyncing, setRazorpaySyncing] = useState(false);
-  const [razorpaySyncMessage, setRazorpaySyncMessage] = useState("");
   const [backendMetrics, setBackendMetrics] = useState(() => calculateProofPilotMetrics([]));
 
   const refreshMetrics = async (fallbackCases = cases) => {
@@ -903,26 +774,6 @@ export default function Dashboard() {
 
   const replaceCase = (nextCase) => {
     setCases((prev) => prev.map((c) => (c.id === nextCase.id || c.case_id === nextCase.case_id ? nextCase : c)));
-  };
-
-  const handleSyncRazorpayDisputes = async () => {
-    setRazorpaySyncing(true);
-    setRazorpaySyncMessage("");
-    try {
-      const res = await apiFetch("/api/integrations/razorpay/sync-disputes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ count: 20 }),
-      });
-      const payload = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(payload.error || "Razorpay dispute sync failed");
-      await loadCasesFromBackend();
-      setRazorpaySyncMessage(`Razorpay sync complete: ${payload.created || 0} new, ${payload.existing || 0} existing, ${payload.failed || 0} failed.`);
-    } catch (error) {
-      setRazorpaySyncMessage(error.message || "Razorpay sync could not complete.");
-    } finally {
-      setRazorpaySyncing(false);
-    }
   };
 
   const handleAttach = async (evidenceKey, uploadPayload = {}) => {
@@ -1175,9 +1026,6 @@ export default function Dashboard() {
               error={dataError}
               lastSynced={lastSynced}
               razorpayStatus={razorpayStatus}
-              onConnectRazorpay={() => setRazorpaySetupOpen(true)}
-              onSyncRazorpay={handleSyncRazorpayDisputes}
-              syncingRazorpay={razorpaySyncing}
             />
           ) : active === "metrics" ? (
             <MetricsDashboard cases={cases} metrics={backendMetrics} />
@@ -1196,14 +1044,6 @@ export default function Dashboard() {
       </div>
       <CaseDrawer open={queuePage && casePanelOpen} caseItem={selected} detail={detail} onClose={() => setCasePanelOpen(false)} />
       <NewCaseModal open={newCaseOpen} onClose={() => setNewCaseOpen(false)} onSubmit={handleCreateCase} />
-      <RazorpayConnectModal
-        open={razorpaySetupOpen}
-        onClose={() => setRazorpaySetupOpen(false)}
-        razorpayStatus={razorpayStatus}
-        onSyncRazorpay={handleSyncRazorpayDisputes}
-        syncingRazorpay={razorpaySyncing}
-        syncMessage={razorpaySyncMessage}
-      />
     </div>
   );
 }
