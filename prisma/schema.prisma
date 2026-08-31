@@ -21,6 +21,8 @@ enum PacketStatus {
   approved
   escalated
   accepted
+  contested
+  closed
 }
 
 enum RecommendedAction {

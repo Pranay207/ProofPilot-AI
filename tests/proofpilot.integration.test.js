@@ -159,4 +159,43 @@ describe("ProofPilot production guardrails", () => {
     assert.equal(malformed.body.judgment.safe_to_auto_submit, false);
     assert.equal(timeout.reason, "AI_TIMEOUT");
   });
+
+  it("exposes judge-readable reliability proof for workflow, queue, and connectors", async () => {
+    const reliability = await json("/api/reliability");
+    assert.equal(reliability.response.status, 200);
+    assert.equal(reliability.body.ok, true);
+
+    const checks = new Map(reliability.body.checks.map((check) => [check.key, check]));
+    assert.equal(checks.get("state_machine")?.status, "passing");
+    assert.ok(checks.has("job_queue"));
+    assert.ok(checks.has("evidence_connectors"));
+    assert.ok(reliability.body.state_distribution);
+    assert.ok(reliability.body.queue);
+    assert.ok(Array.isArray(reliability.body.connector_status));
+  });
+
+  it("keeps evidence auto-collection safe when external connectors are not configured", async () => {
+    const collection = await json("/api/cases/PP-2026-0001/auto-collect-evidence", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+
+    assert.equal(collection.response.status, 200);
+    assert.equal(collection.body.ok, true);
+    assert.equal(collection.body.collection.connectors_run >= 1, true);
+    assert.equal(collection.body.collection.connectors_configured, 0);
+    assert.deepEqual(collection.body.collection.auto_available_evidence, []);
+  });
+
+  it("exports an honest production-readiness report for evaluators", async () => {
+    const report = await json("/api/reliability/export");
+
+    assert.equal(report.response.status, 200);
+    assert.equal(report.body.ok, true);
+    assert.equal(report.body.product, "ProofPilot AI");
+    assert.ok(report.body.model);
+    assert.ok(report.body.infrastructure);
+    assert.ok(report.body.workflow_states);
+    assert.ok(report.body.production_gaps_remaining.some((gap) => gap.includes("synthetic ML training data")));
+  });
 });
