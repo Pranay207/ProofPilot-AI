@@ -38,7 +38,7 @@ const PAGE_TITLES = {
   overview: "Overview",
   "risk-queue": "Action Queue",
   metrics: "Model & Impact",
-  reliability: "System Reliability",
+  reliability: "System Health",
   "audit-log": "Audit Trail",
 };
 
@@ -334,11 +334,11 @@ function DataStatusStrip({ dataSource, loading, error, lastSynced, razorpayStatu
   const connected = !loading && !error && dataSource === "secure case store";
   const razorpayConnected = Boolean(razorpayStatus?.configured);
   const sources = [
-    { icon: Database, label: "Case store", value: connected ? "Secure case store" : "Awaiting secure API", ok: connected },
-    { icon: IndianRupee, label: "Payments", value: razorpayConnected ? "Razorpay connected" : "Awaiting connection", ok: razorpayConnected },
+    { icon: Database, label: "Case store", value: connected ? "Connected" : "Connecting", ok: connected },
+    { icon: IndianRupee, label: "Payments", value: razorpayConnected ? "Connected" : "Not connected", ok: razorpayConnected },
     { icon: PackageCheck, label: "Evidence", value: "Fulfillment proof ready", ok: true },
     { icon: MessageSquare, label: "Claims", value: "Complaint parser ready", ok: true },
-    { icon: UploadCloud, label: "Webhook", value: razorpayStatus?.webhook_secret_configured ? "Signature verified" : "Setup required", ok: Boolean(razorpayStatus?.webhook_secret_configured) },
+    { icon: UploadCloud, label: "Webhook", value: razorpayStatus?.webhook_secret_configured ? "Verified" : "Needs setup", ok: Boolean(razorpayStatus?.webhook_secret_configured) },
   ];
 
   return (
@@ -697,7 +697,7 @@ export default function Dashboard() {
     setDataError("");
     try {
       const res = await apiFetch("/api/cases");
-      if (!res.ok) throw new Error("Secure API connection unavailable");
+      if (!res.ok) throw new Error("Service connection unavailable");
       const rows = await res.json();
       if (!Array.isArray(rows)) throw new Error("Unexpected case response");
       const normalized = rows.map((item) => ({ ...item, id: item.id || item.case_id }));
@@ -711,7 +711,7 @@ export default function Dashboard() {
       setCases([]);
       setSelectedId(null);
       setDataSource("secure case store");
-      setDataError("Secure API is unavailable. Cases will appear after the backend connection is restored.");
+      setDataError("Service connection is unavailable. Cases will appear after the connection is restored.");
       await refreshMetrics([]);
       throw error;
     } finally {
@@ -950,7 +950,7 @@ export default function Dashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
       });
-      if (!res.ok) throw new Error("Secure API connection unavailable");
+      if (!res.ok) throw new Error("Service connection unavailable");
       const created = await res.json();
       setCases((prev) => [created, ...prev]);
       setSelectedId(created.id);

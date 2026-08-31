@@ -890,51 +890,51 @@ app.get("/api/reliability", async (req, res, next) => {
         key: "webhook_signature",
         label: "Webhook signature gate",
         status: process.env.RAZORPAY_WEBHOOK_SECRET ? "passing" : "needs_config",
-        proof: "Unsigned or mismatched Razorpay webhooks return WEBHOOK_SIGNATURE_FAILED and create no case.",
+        proof: "Only verified Razorpay events are accepted before case creation.",
       },
       {
         key: "webhook_idempotency",
         label: "Duplicate webhook protection",
         status: "passing",
-        proof: "Payload fingerprint is stored; repeated events are acknowledged and ignored safely.",
+        proof: "Webhook fingerprints are stored so repeated deliveries are acknowledged without creating duplicate cases.",
       },
       {
         key: "state_machine",
-        label: "Formal case lifecycle state machine",
+        label: "Case lifecycle controls",
         status: "passing",
-        proof: `All ${cases.length} cases have a derived workflow state. Distribution: ${Object.entries(stateDistribution).map(([k, v]) => `${k}:${v}`).join(", ") || "none yet"}.`,
+        proof: `${cases.length} case(s) currently follow the controlled dispute workflow.`,
       },
       {
         key: "missing_evidence_block",
         label: "Missing evidence approval block",
         status: "passing",
-        proof: `${blockedContestCases.length} contest candidate(s) currently blocked until proof readiness reaches 80%.`,
+        proof: `${blockedContestCases.length} contest candidate(s) blocked until required proof reaches the readiness threshold.`,
       },
       {
         key: "human_approval",
         label: "Human approval before action",
         status: auditedHumanDecisions.length === humanApprovedCases.length ? "passing" : "needs_review",
-        proof: `${auditedHumanDecisions.length}/${humanApprovedCases.length} decided case(s) have Human Reviewer audit entries.`,
+        proof: `${auditedHumanDecisions.length}/${humanApprovedCases.length} decided case(s) include reviewer audit entries.`,
       },
       {
         key: "ai_fallback",
-        label: "AI malformed output fallback",
+        label: "AI response fallback",
         status: "passing",
-        proof: "AI JSON is schema-validated; invalid output falls back to a safe draft requiring human review.",
+        proof: "Classification issues fall back to a reviewer-controlled draft.",
       },
       {
         key: "evidence_storage",
         label: "Evidence file persistence",
-        status: process.env.EVIDENCE_STORAGE_PROVIDER === "s3" || process.env.EVIDENCE_S3_BUCKET ? "passing" : "demo_storage",
-        proof: `${uploadedEvidenceCount} evidence file(s) linked. Production uses S3-compatible storage; local is demo/dev.`,
+        status: process.env.EVIDENCE_STORAGE_PROVIDER === "s3" || process.env.EVIDENCE_S3_BUCKET ? "passing" : "local_storage",
+        proof: `${uploadedEvidenceCount} evidence file(s) linked. Configured deployments use cloud evidence storage.`,
       },
       {
         key: "job_queue",
         label: "Background job retry queue",
         status: queueHealth.available ? "passing" : "needs_config",
         proof: queueHealth.available
-          ? `BullMQ running on Redis. Queues: ${Object.keys(queueHealth.queues || {}).join(", ") || "initialising"}.`
-          : `In-memory sync fallback active (no Redis). Set REDIS_URL for production retry support.`,
+          ? "Persistent background retries are active."
+          : "Persistent background retries are not enabled for this environment.",
       },
       {
         key: "evidence_connectors",
@@ -944,9 +944,9 @@ app.get("/api/reliability", async (req, res, next) => {
       },
       {
         key: "external_submission",
-        label: "External dispute submission guard",
+        label: "Dispute submission control",
         status: "passing",
-        proof: "Razorpay submission endpoint requires an approved packet and reviewer audit before API submission.",
+        proof: "Razorpay dispute actions require an approved evidence packet and a reviewer audit trail.",
       },
     ];
 
@@ -955,11 +955,11 @@ app.get("/api/reliability", async (req, res, next) => {
       source: "backend",
       checks,
       integrations: {
-        case_store: useDatabase ? "PostgreSQL" : "Local sample data",
-        razorpay: config.configured ? `${config.mode} keys configured` : "Not configured",
+        case_store: useDatabase ? "Connected database" : "Local fallback",
+        razorpay: config.configured ? "Connected" : "Not connected",
         webhook_secret: Boolean(process.env.RAZORPAY_WEBHOOK_SECRET),
-        evidence_storage: process.env.EVIDENCE_STORAGE_PROVIDER || (process.env.NODE_ENV === "production" ? "s3" : "local"),
-        job_queue: queueHealth.mode,
+        evidence_storage: process.env.EVIDENCE_STORAGE_PROVIDER === "s3" || process.env.EVIDENCE_S3_BUCKET ? "Cloud storage" : "Local storage",
+        job_queue: queueHealth.available ? "Persistent retries" : "Synchronous processing",
         connectors: `${activeConnectors.length}/${connectors.length} active`,
         demo_mode: process.env.DEMO_MODE === "true",
       },

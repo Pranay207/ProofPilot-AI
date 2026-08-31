@@ -202,24 +202,24 @@ export default function MetricsDashboard({ cases = [], metrics: backendMetrics }
         <div className="bg-white rounded-lg border border-slate-200 p-4">
           <div className="flex items-center gap-2 mb-3">
             <LockKeyhole className="w-4 h-4 text-emerald-600" />
-            <h3 className="text-sm font-semibold text-slate-900">AI Control Boundary</h3>
+            <h3 className="text-sm font-semibold text-slate-900">Decision Controls</h3>
           </div>
           <div className="space-y-2 text-sm text-slate-600">
-            <div className="rounded-md bg-slate-50 px-3 py-2">AI classifies complaint intent and drafts reviewer copy.</div>
-            <div className="rounded-md bg-slate-50 px-3 py-2">Rules calculate readiness, recommendation, and safe next action.</div>
-            <div className="rounded-md bg-slate-50 px-3 py-2">Humans approve contest, accept/refund, or escalation before external action.</div>
+            <div className="rounded-md bg-slate-50 px-3 py-2">Customer claims are classified and summarized for review.</div>
+            <div className="rounded-md bg-slate-50 px-3 py-2">Readiness and risk are calculated from stored case signals.</div>
+            <div className="rounded-md bg-slate-50 px-3 py-2">Final dispute actions require reviewer approval.</div>
           </div>
         </div>
 
         <div className="bg-white rounded-lg border border-slate-200 p-4">
           <div className="flex items-center gap-2 mb-3">
             <RotateCcw className="w-4 h-4 text-blue-600" />
-            <h3 className="text-sm font-semibold text-slate-900">Failure Recovery</h3>
+            <h3 className="text-sm font-semibold text-slate-900">Recovery Controls</h3>
           </div>
           <div className="space-y-2 text-sm text-slate-600">
-            <div className="rounded-md bg-slate-50 px-3 py-2">Duplicate webhook: ignored safely, no duplicate case.</div>
-            <div className="rounded-md bg-slate-50 px-3 py-2">AI timeout or invalid JSON: fallback draft and human review.</div>
-            <div className="rounded-md bg-slate-50 px-3 py-2">Missing proof: contest is blocked until evidence is attached or reviewer escalates.</div>
+            <div className="rounded-md bg-slate-50 px-3 py-2">Repeated payment events do not create duplicate cases.</div>
+            <div className="rounded-md bg-slate-50 px-3 py-2">Unavailable classification falls back to reviewer-controlled drafting.</div>
+            <div className="rounded-md bg-slate-50 px-3 py-2">Incomplete proof blocks contest actions until resolved.</div>
           </div>
         </div>
       </div>
