@@ -158,6 +158,7 @@ export default function CaseDetail({
   activeTab,
   onTabChange,
   onAttach,
+  onRemoveEvidence,
   recentlyAttached,
   attachments,
   onApprove,
@@ -267,9 +268,9 @@ export default function CaseDetail({
       </div>
 
       <div>
-        {tab === "evidence-passport" && <EvidencePassport caseItem={caseItem} onAttach={onAttach} attachments={attachments} />}
+        {tab === "evidence-passport" && <EvidencePassport caseItem={caseItem} onAttach={onAttach} onRemove={onRemoveEvidence} attachments={attachments} />}
         {tab === "timeline" && <PaymentTimeline caseItem={caseItem} />}
-        {tab === "missing-proof" && <MissingProofRadar caseItem={caseItem} recentlyAttached={recentlyAttached} attachments={attachments} onAttach={onAttach} />}
+        {tab === "missing-proof" && <MissingProofRadar caseItem={caseItem} recentlyAttached={recentlyAttached} attachments={attachments} onAttach={onAttach} onRemove={onRemoveEvidence} />}
         {tab === "dispute-packet" && <DisputePacket caseItem={caseItem} onExport={onExportPacket} />}
         {tab === "human-approval" && (
           <HumanApproval

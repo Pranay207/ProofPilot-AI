@@ -20,7 +20,7 @@ import {
   RAZORPAY_ALLOWED_WEBHOOK_EVENTS,
 } from "./services/webhookIdempotencyService.js";
 import { callRazorpay as requestRazorpay, getRazorpayConfig as readRazorpayConfig } from "./integrations/razorpayClient.js";
-import { findEvidenceUpload, readEvidenceUpload, saveEvidenceUpload } from "./services/evidenceService.js";
+import { deleteEvidenceUpload, findEvidenceUpload, readEvidenceUpload, saveEvidenceUpload } from "./services/evidenceService.js";
 import { acceptRazorpayDispute, contestRazorpayDispute, uploadRazorpayDocument } from "./integrations/razorpayClient.js";
 import { authenticateRequest, rateLimit } from "./middleware/auth.js";
 import { getQueueHealth, addJob, QUEUE_NAMES, JOB_TYPES } from "./queue/queueClient.js";
@@ -230,6 +230,10 @@ function toFrontendCase(row) {
       if (item.fileName) {
         files[item.key] = {
           file_name: item.fileName,
+          mime_type: item.mimeType,
+          size_bytes: item.sizeBytes,
+          storage_provider: item.storageProvider,
+          storage_status: item.storageProvider === "s3" ? "Cloud storage" : item.storageProvider ? "Local storage" : "Attached",
           uploaded_at: item.attachedAt?.toISOString?.() || item.attachedAt,
           download_url: `/api/cases/${encodeURIComponent(row.caseId)}/evidence-files/${encodeURIComponent(item.key)}`,
         };
@@ -1175,6 +1179,85 @@ app.patch("/api/cases/:id/evidence", async (req, res, next) => {
       },
     });
     await db.auditLog.create({ data: { caseId: refreshed.id, actor: "Evidence Radar", action: "evidence_attached", detail: `Attached ${evidenceKey}${upload?.file_name ? ` (${upload.file_name})` : ""}` } });
+    const finalRow = await getCaseByParam(db, req.params.id, req.merchant.id);
+    res.json(toFrontendCase(finalRow));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/cases/:id/evidence/:evidenceKey", async (req, res, next) => {
+  try {
+    const evidenceKey = req.params.evidenceKey;
+    const db = await getPrisma();
+    if (!db) {
+      localCases = localCases.map((caseItem) => {
+        if (caseItem.id !== req.params.id && caseItem.case_id !== req.params.id) return caseItem;
+        const available = (caseItem.available_evidence || []).filter((item) => item !== evidenceKey);
+        const required = getRequired(caseItem.dispute_type);
+        const missing = required.includes(evidenceKey)
+          ? [...new Set([...(caseItem.missing_evidence || []), evidenceKey])]
+          : caseItem.missing_evidence || [];
+        const evidenceFiles = { ...(caseItem.evidence_files || {}) };
+        delete evidenceFiles[evidenceKey];
+        const updated = {
+          ...caseItem,
+          available_evidence: available,
+          missing_evidence: missing,
+          evidence_files: evidenceFiles,
+        };
+        const scores = scoreCase(updated);
+        return addAudit(
+          { ...updated, ...scores },
+          "Evidence Radar",
+          "evidence_removed",
+          `Removed ${evidenceKey}`,
+        );
+      });
+      return res.json(localCases.find((item) => item.id === req.params.id || item.case_id === req.params.id));
+    }
+
+    const caseRow = await getCaseByParam(db, req.params.id, req.merchant.id);
+    if (!caseRow) return res.status(404).json({ error: "Case not found" });
+    const evidenceRow = caseRow.evidenceItems?.find((item) => item.key === evidenceKey);
+    if (evidenceRow?.storageKey) {
+      await deleteEvidenceUpload(caseRow.caseId, evidenceKey, evidenceRow.storageKey).catch(() => {});
+    }
+
+    await db.evidenceItem.upsert({
+      where: { caseId_key: { caseId: caseRow.id, key: evidenceKey } },
+      update: {
+        status: "missing",
+        fileName: null,
+        mimeType: null,
+        sizeBytes: null,
+        storageProvider: null,
+        storageKey: null,
+        razorpayDocumentId: null,
+        attachedAt: null,
+      },
+      create: {
+        caseId: caseRow.id,
+        key: evidenceKey,
+        label: EVIDENCE_LABELS[evidenceKey] || evidenceKey,
+        status: "missing",
+      },
+    });
+
+    const refreshed = await getCaseByParam(db, req.params.id, req.merchant.id);
+    const mapped = toFrontendCase(refreshed);
+    const scores = scoreCase(mapped);
+    await db.case.update({
+      where: { id: refreshed.id },
+      data: {
+        riskScore: scores.risk_score,
+        readinessScore: scores.readiness_score,
+        confidenceScore: scores.confidence_score,
+        recommendedAction: scores.recommended_action,
+        actionReason: scores.action_reason,
+      },
+    });
+    await db.auditLog.create({ data: { caseId: refreshed.id, actor: "Evidence Radar", action: "evidence_removed", detail: `Removed ${evidenceKey}` } });
     const finalRow = await getCaseByParam(db, req.params.id, req.merchant.id);
     res.json(toFrontendCase(finalRow));
   } catch (error) {

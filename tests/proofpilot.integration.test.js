@@ -143,6 +143,13 @@ describe("ProofPilot production guardrails", () => {
     assert.equal(download.status, 200);
     assert.equal(await download.text(), content);
     assert.match(download.headers.get("content-disposition"), /integration-delivery-proof\.txt/);
+
+    const removed = await json("/api/cases/PP-2026-0001/evidence/delivery%20proof", {
+      method: "DELETE",
+    });
+    assert.equal(removed.response.status, 200);
+    assert.equal(removed.body.evidence_files["delivery proof"], undefined);
+    assert.ok(removed.body.missing_evidence.includes("delivery proof"));
   });
 
   it("falls back safely when AI output is malformed or timed out", async () => {

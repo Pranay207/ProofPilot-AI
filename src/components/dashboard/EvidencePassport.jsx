@@ -1,7 +1,8 @@
 import React from "react";
-import { CheckCircle2, XCircle, User, CalendarClock, Building2, Paperclip } from "lucide-react";
-import { EVIDENCE_LABELS } from "@/lib/ruleEngine";
+import { CheckCircle2, XCircle, User, CalendarClock, Building2 } from "lucide-react";
+import { EVIDENCE_LABELS, getRequired, hasEvidence } from "@/lib/ruleEngine";
 import AttachProofButton from "./AttachProofButton";
+import EvidenceFileActions from "./EvidenceFileActions";
 
 function Field({ label, value, mono }) {
   return (
@@ -12,34 +13,11 @@ function Field({ label, value, mono }) {
   );
 }
 
-function EvidenceFileMeta({ file }) {
-  if (!file) return null;
-  const fileName = typeof file === "string" ? file : file.file_name;
-  const uploadedAt = typeof file === "object" && file.uploaded_at
-    ? new Date(file.uploaded_at).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
-    : "";
-  const content = (
-    <>
-      <Paperclip className="w-3 h-3" /> {fileName}
-      {uploadedAt ? <span className="text-slate-300">| {uploadedAt}</span> : null}
-    </>
-  );
-  if (typeof file === "object" && file.download_url) {
-    return (
-      <a href={file.download_url} className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-700 truncate max-w-[240px]">
-        {content}
-      </a>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 text-[11px] text-slate-400 truncate max-w-[240px]">
-      {content}
-    </span>
-  );
-}
-
-export default function EvidencePassport({ caseItem, onAttach, attachments }) {
+export default function EvidencePassport({ caseItem, onAttach, onRemove, attachments }) {
   if (!caseItem) return null;
+  const required = getRequired(caseItem.dispute_type);
+  const availableCount = required.filter((key) => hasEvidence(caseItem, key)).length;
+
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-lg border border-slate-200 p-4">
@@ -82,41 +60,56 @@ export default function EvidencePassport({ caseItem, onAttach, attachments }) {
         </div>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-4">
-        <div className="bg-white rounded-lg border border-slate-200 p-4">
-          <h3 className="text-sm font-semibold text-emerald-700 mb-3">Proof Available</h3>
-          {caseItem.available_evidence?.length ? (
-            <ul className="space-y-1.5">
-              {caseItem.available_evidence.map((e) => (
-                <li key={e} className="flex items-center gap-2 text-sm">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                  <span className="text-slate-700">{EVIDENCE_LABELS[e] || e}</span>
-                  <EvidenceFileMeta file={attachments?.[e]} />
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="text-xs text-slate-400 italic">None</div>
-          )}
+      <div className="bg-white rounded-lg border border-slate-200 p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900">Required Proof Checklist</h3>
+            <p className="mt-0.5 text-xs text-slate-500">{availableCount}/{required.length} required items attached for this case type.</p>
+          </div>
+          <span className="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-600">
+            {caseItem.dispute_type.replace(/_/g, " ")}
+          </span>
         </div>
-        <div className="bg-white rounded-lg border border-slate-200 p-4">
-          <h3 className="text-sm font-semibold text-red-600 mb-3">Proof Missing</h3>
-          {caseItem.missing_evidence?.length ? (
-            <ul className="space-y-2">
-              {caseItem.missing_evidence.map((e) => (
-                <li key={e} className="flex items-center justify-between gap-3">
-                  <span className="flex items-center gap-2 text-sm text-slate-700">
-                    <XCircle className="w-4 h-4 text-red-500" />
-                    {EVIDENCE_LABELS[e] || e}
-                  </span>
-                  <AttachProofButton onUploaded={(fileName) => onAttach?.(e, fileName)} />
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="text-xs text-emerald-700 bg-emerald-50 rounded-md p-3">All evidence attached.</div>
-          )}
-        </div>
+        {required.length ? (
+          <div className="grid gap-3 md:grid-cols-2">
+            {required.map((e) => {
+              const available = hasEvidence(caseItem, e);
+              const file = attachments?.[e];
+              return (
+                <div key={e} className="rounded-lg border border-slate-100 bg-white p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-start gap-2">
+                      {available ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" /> : <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />}
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-slate-800">{EVIDENCE_LABELS[e] || e}</div>
+                        <div className={`mt-1 inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium ${available ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
+                          {available ? "Attached" : "Missing"}
+                        </div>
+                      </div>
+                    </div>
+                    {!available && <AttachProofButton onUploaded={(payload) => onAttach?.(e, payload)} />}
+                  </div>
+                  {available && file && (
+                    <EvidenceFileActions
+                      evidenceKey={e}
+                      file={file}
+                      onReplace={onAttach}
+                      onRemove={onRemove}
+                    />
+                  )}
+                  {available && !file && (
+                    <div className="mt-2 flex items-center justify-between gap-3 rounded-md border border-amber-100 bg-amber-50 p-2">
+                      <span className="text-xs text-amber-800">Confirmed in case record. Attach a source file for the packet.</span>
+                      <AttachProofButton label="Add file" compact onUploaded={(payload) => onAttach?.(e, payload)} />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="rounded-md bg-slate-50 p-3 text-xs text-slate-500">No required proof checklist is configured for this case type.</div>
+        )}
       </div>
     </div>
   );

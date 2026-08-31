@@ -1,7 +1,7 @@
 import React, { useRef, useState } from "react";
 import { UploadCloud, CheckCircle2, AlertCircle } from "lucide-react";
 
-export default function AttachProofButton({ onUploaded, disabled }) {
+export default function AttachProofButton({ onUploaded, disabled, label = "Attach proof", compact = false }) {
   const inputRef = useRef(null);
   const [fileName, setFileName] = useState(null);
   const [progress, setProgress] = useState(0);
@@ -78,10 +78,12 @@ export default function AttachProofButton({ onUploaded, disabled }) {
         <button
           onClick={() => inputRef.current?.click()}
           disabled={disabled}
-          className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className={compact
+            ? "inline-flex h-8 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+            : "inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"}
         >
           <UploadCloud className="w-3.5 h-3.5" />
-          Attach proof
+          {label}
         </button>
       )}
     </div>

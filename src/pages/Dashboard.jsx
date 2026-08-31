@@ -799,7 +799,13 @@ export default function Dashboard() {
         ...prev,
         [selected.id]: {
           ...(prev[selected.id] || {}),
-          [evidenceKey]: { file_name: fileName, uploaded_at: new Date().toISOString() },
+          [evidenceKey]: {
+            file_name: fileName,
+            mime_type: uploadPayload.mimeType,
+            size_bytes: uploadPayload.size,
+            uploaded_at: new Date().toISOString(),
+            storage_status: "Saving",
+          },
         },
       }));
     }
@@ -827,6 +833,48 @@ export default function Dashboard() {
       await refreshMetrics();
     } catch {
       setDataError("Evidence upload could not be saved. Please retry after the backend connection is restored.");
+    }
+  };
+
+  const handleRemoveEvidence = async (evidenceKey) => {
+    if (!selected) return;
+    const confirmed = window.confirm(`Remove ${EVIDENCE_LABELS[evidenceKey] || evidenceKey} from this case?`);
+    if (!confirmed) return;
+
+    const available = (selected.available_evidence || []).filter((item) => item !== evidenceKey);
+    const required = getRequired(selected.dispute_type);
+    const missing = required.includes(evidenceKey)
+      ? [...new Set([...(selected.missing_evidence || []), evidenceKey])]
+      : selected.missing_evidence || [];
+    const scores = scoreCase({ ...selected, available_evidence: available, missing_evidence: missing });
+    updateCase(selected.id, {
+      available_evidence: available,
+      missing_evidence: missing,
+      ...scores,
+    });
+    setAttachments((prev) => {
+      const nextCaseAttachments = { ...(prev[selected.id] || {}) };
+      delete nextCaseAttachments[evidenceKey];
+      return {
+        ...prev,
+        [selected.id]: nextCaseAttachments,
+      };
+    });
+    setRecentlyAttached((prev) => prev.filter((item) => item !== evidenceKey));
+
+    try {
+      const res = await apiFetch(`/api/cases/${selected.id}/evidence/${encodeURIComponent(evidenceKey)}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        throw new Error(payload.error || "Evidence removal failed");
+      }
+      const nextCase = await res.json();
+      replaceCase(nextCase);
+      await refreshMetrics();
+    } catch {
+      setDataError("Evidence could not be removed. Please refresh and try again.");
     }
   };
 
@@ -969,6 +1017,7 @@ export default function Dashboard() {
       activeTab={caseTab}
       onTabChange={setCaseTab}
       onAttach={handleAttach}
+      onRemoveEvidence={handleRemoveEvidence}
       recentlyAttached={recentlyAttached}
       attachments={{ ...(selected.evidence_files || {}), ...(attachments[selected.id] || {}) }}
       onApprove={() => handleDecision("approved", "approved")}

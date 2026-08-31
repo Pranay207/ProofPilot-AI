@@ -1,36 +1,11 @@
 import React from "react";
-import { Radar, CheckCircle2, XCircle, Sparkles, Paperclip } from "lucide-react";
+import { Radar, CheckCircle2, XCircle, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EVIDENCE_LABELS, getRequired, hasEvidence } from "@/lib/ruleEngine";
 import AttachProofButton from "./AttachProofButton";
+import EvidenceFileActions from "./EvidenceFileActions";
 
-function EvidenceFileMeta({ file }) {
-  if (!file) return null;
-  const fileName = typeof file === "string" ? file : file.file_name;
-  const uploadedAt = typeof file === "object" && file.uploaded_at
-    ? new Date(file.uploaded_at).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
-    : "";
-  const content = (
-    <>
-      <Paperclip className="w-3 h-3" /> {fileName}
-      {uploadedAt ? <span className="text-slate-300">| {uploadedAt}</span> : null}
-    </>
-  );
-  if (typeof file === "object" && file.download_url) {
-    return (
-      <a href={file.download_url} className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-700 truncate max-w-[240px]">
-        {content}
-      </a>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 text-[11px] text-slate-400 truncate max-w-[240px]">
-      {content}
-    </span>
-  );
-}
-
-export default function MissingProofRadar({ caseItem, recentlyAttached = [], attachments, onAttach }) {
+export default function MissingProofRadar({ caseItem, recentlyAttached = [], attachments, onAttach, onRemove }) {
   if (!caseItem) return null;
   const required = getRequired(caseItem.dispute_type);
   const have = required.filter((k) => hasEvidence(caseItem, k)).length;
@@ -81,19 +56,34 @@ export default function MissingProofRadar({ caseItem, recentlyAttached = [], att
               const Icon = cfg.icon;
               const file = attachments?.[key];
               return (
-                <li key={key} className="flex items-center justify-between gap-3 border border-slate-100 rounded-md p-3">
-                  <div className="flex items-center gap-2.5">
-                    <Icon className={cn("w-4 h-4 shrink-0", cfg.iconColor)} />
-                    <div>
-                      <div className="text-sm font-medium text-slate-800">{EVIDENCE_LABELS[key] || key}</div>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className={cn("inline-block text-[10px] font-medium px-1.5 py-0.5 rounded", cfg.badge)}>{cfg.label}</span>
-                        <EvidenceFileMeta file={file} />
+                <li key={key} className="border border-slate-100 rounded-md p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-2.5">
+                      <Icon className={cn("mt-0.5 w-4 h-4 shrink-0", cfg.iconColor)} />
+                      <div>
+                        <div className="text-sm font-medium text-slate-800">{EVIDENCE_LABELS[key] || key}</div>
+                        <div className="mt-1">
+                          <span className={cn("inline-block text-[10px] font-medium px-1.5 py-0.5 rounded", cfg.badge)}>{cfg.label}</span>
+                        </div>
                       </div>
                     </div>
+                    {status === "missing" && (
+                      <AttachProofButton onUploaded={(payload) => onAttach?.(key, payload)} />
+                    )}
                   </div>
-                  {status === "missing" && (
-                    <AttachProofButton onUploaded={(fileName) => onAttach?.(key, fileName)} />
+                  {status !== "missing" && file && (
+                    <EvidenceFileActions
+                      evidenceKey={key}
+                      file={file}
+                      onReplace={onAttach}
+                      onRemove={onRemove}
+                    />
+                  )}
+                  {status !== "missing" && !file && (
+                    <div className="mt-2 flex items-center justify-between gap-3 rounded-md border border-amber-100 bg-amber-50 p-2">
+                      <span className="text-xs text-amber-800">Confirmed in case record. Attach a source file for the packet.</span>
+                      <AttachProofButton label="Add file" compact onUploaded={(payload) => onAttach?.(key, payload)} />
+                    </div>
                   )}
                 </li>
               );

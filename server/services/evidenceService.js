@@ -2,7 +2,7 @@ import { EVIDENCE_LABELS, getRequired, scoreCase } from "../../src/lib/ruleEngin
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = new Set([
@@ -174,4 +174,28 @@ export async function readEvidenceUpload(caseId, evidenceKey, storedKey) {
   if (!upload) return null;
   if (upload.storage_provider === "s3") return Buffer.from(await upload.body.transformToByteArray());
   return fs.readFile(upload.absolutePath);
+}
+
+export async function deleteEvidenceUpload(caseId, evidenceKey, storedKey) {
+  if (storageProvider === "s3" && storedKey) {
+    await s3Client.send(new DeleteObjectCommand({ Bucket: s3Bucket, Key: storedKey }));
+    return true;
+  }
+
+  const safeCaseId = safeSegment(caseId);
+  const safeEvidenceKey = safeSegment(evidenceKey);
+  const caseDir = path.join(UPLOAD_ROOT, safeCaseId);
+  if (storedKey) {
+    const storedName = path.basename(storedKey);
+    await fs.unlink(path.join(caseDir, storedName)).catch(() => {});
+    return true;
+  }
+
+  const entries = await fs.readdir(caseDir).catch(() => []);
+  await Promise.all(
+    entries
+      .filter((entry) => entry.startsWith(`${safeEvidenceKey}-`))
+      .map((entry) => fs.unlink(path.join(caseDir, entry)).catch(() => {})),
+  );
+  return true;
 }
