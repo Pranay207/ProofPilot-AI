@@ -539,7 +539,7 @@ function razorpayDisputeToCaseInput(payload) {
   };
 }
 
-async function createCaseFromRazorpayDispute(payload) {
+async function createCaseFromRazorpayDispute(payload, merchantOverride = null) {
   const input = razorpayDisputeToCaseInput(payload);
   const db = await getPrisma();
 
@@ -557,7 +557,7 @@ async function createCaseFromRazorpayDispute(payload) {
 
   const count = await db.case.count();
   const item = buildCasePayload(input, count);
-  const merchant = await getWebhookMerchant();
+  const merchant = merchantOverride || await getWebhookMerchant();
 
   const created = await db.case.create({
     data: {
@@ -745,6 +745,56 @@ app.get("/api/integrations/razorpay/disputes", async (req, res, next) => {
     const count = Math.min(Number(req.query.count || 10), 50);
     const data = await callRazorpay(`/disputes?count=${count}`);
     res.json({ ok: true, count: data.count || 0, disputes: (data.items || []).map(normalizeDispute) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/integrations/razorpay/sync-disputes", rateLimit({ max: 10 }), async (req, res, next) => {
+  try {
+    const db = await getPrisma();
+    if (!db) {
+      return res.status(503).json({ error: "Razorpay dispute sync requires PostgreSQL mode" });
+    }
+
+    const count = Math.min(Number(req.body?.count || req.query.count || 10), 50);
+    const data = await callRazorpay(`/disputes?count=${count}`);
+    const disputes = Array.isArray(data.items) ? data.items : [];
+    const results = [];
+
+    for (const dispute of disputes) {
+      try {
+        let payment = null;
+        if (dispute.payment_id) {
+          payment = await callRazorpay(`/payments/${encodeURIComponent(dispute.payment_id)}`).catch(() => null);
+        }
+
+        const payload = {
+          event: "payment.dispute.created",
+          created_at: dispute.created_at || Math.floor(Date.now() / 1000),
+          payload: {
+            dispute: { entity: dispute },
+            payment: { entity: payment || { id: dispute.payment_id, amount: dispute.amount, currency: dispute.currency, status: "captured" } },
+          },
+        };
+
+        const created = await createCaseFromRazorpayDispute(payload, req.merchant);
+        results.push({ dispute_id: dispute.id, payment_id: dispute.payment_id || null, ...created });
+      } catch (error) {
+        results.push({ dispute_id: dispute.id || null, created: false, error: error.message });
+      }
+    }
+
+    res.json({
+      ok: true,
+      provider: "razorpay",
+      fetched: disputes.length,
+      created: results.filter((item) => item.created).length,
+      existing: results.filter((item) => item.created === false && !item.error).length,
+      failed: results.filter((item) => item.error).length,
+      results,
+      synced_at: new Date().toISOString(),
+    });
   } catch (error) {
     next(error);
   }
