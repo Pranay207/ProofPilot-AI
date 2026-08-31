@@ -36,6 +36,22 @@ function IntegrationCard({ icon: Icon, label, value }) {
   );
 }
 
+function SafeguardCard({ title, description, healthy }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4">
+      <div className="flex items-start gap-3">
+        <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${healthy ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+          {healthy ? <CheckCircle2 className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+        </span>
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-slate-900">{title}</div>
+          <p className="mt-1 text-sm leading-relaxed text-slate-500">{description}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ReliabilityDashboard() {
   const [payload, setPayload] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -62,13 +78,26 @@ export default function ReliabilityDashboard() {
 
   const checks = payload?.checks || [];
   const integrations = payload?.integrations || {};
+  const findCheck = (key) => checks.find((check) => check.key === key);
+  const isHealthy = (key) => findCheck(key)?.status === "passing";
+  const queueCheck = findCheck("job_queue");
+  const allCoreHealthy = [
+    "webhook_signature",
+    "webhook_idempotency",
+    "state_machine",
+    "missing_evidence_block",
+    "human_approval",
+    "ai_fallback",
+    "evidence_storage",
+    "external_submission",
+  ].every((key) => ["passing", "local_storage"].includes(findCheck(key)?.status));
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-slate-900">System Health</h2>
-          <p className="text-sm text-slate-500">Operational checks for secure dispute intake, evidence handling, and approval controls.</p>
+          <p className="text-sm text-slate-500">Connection and control status for payment disputes, evidence, and approvals.</p>
         </div>
         <button
           onClick={load}
@@ -94,27 +123,44 @@ export default function ReliabilityDashboard() {
         <IntegrationCard icon={UploadCloud} label="Evidence storage" value={integrations.evidence_storage} />
       </div>
 
-      <div className="rounded-lg border border-slate-200 bg-white">
-        <div className="border-b border-slate-200 px-4 py-3">
-          <h3 className="text-sm font-semibold text-slate-900">Operational Checks</h3>
-          <p className="mt-1 text-xs text-slate-500">Live safeguards for webhook intake, duplicate handling, evidence storage, and controlled dispute actions.</p>
+      <div className="rounded-lg border border-slate-200 bg-white p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900">Safeguards</h3>
+            <p className="mt-1 text-xs text-slate-500">Core controls that keep dispute handling accurate and reviewer-led.</p>
+          </div>
+          <StatusBadge status={allCoreHealthy ? "passing" : "needs_review"} />
         </div>
-        <div className="divide-y divide-slate-100">
-          {loading && !checks.length ? (
-            <div className="px-4 py-8 text-sm text-slate-500">Loading system health report...</div>
-          ) : (
-            checks.map((check) => (
-              <div key={check.key} className="grid gap-3 px-4 py-4 md:grid-cols-[220px_130px_minmax(0,1fr)] md:items-center">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className={`h-4 w-4 ${check.status === "passing" ? "text-emerald-600" : "text-amber-600"}`} />
-                  <span className="text-sm font-semibold text-slate-900">{check.label}</span>
-                </div>
-                <StatusBadge status={check.status} />
-                <p className="text-sm leading-relaxed text-slate-600">{check.proof}</p>
-              </div>
-            ))
-          )}
-        </div>
+
+        {loading && !checks.length ? (
+          <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-8 text-sm text-slate-500">
+            Loading system health report...
+          </div>
+        ) : (
+          <div className="mt-4 grid gap-3 xl:grid-cols-3">
+            <SafeguardCard
+              title="Secure event intake"
+              description="Only verified Razorpay events are accepted, and repeated deliveries do not create duplicate cases."
+              healthy={isHealthy("webhook_signature") && isHealthy("webhook_idempotency")}
+            />
+            <SafeguardCard
+              title="Controlled case workflow"
+              description="Cases follow a fixed review flow, and incomplete proof blocks contest actions."
+              healthy={isHealthy("state_machine") && isHealthy("missing_evidence_block")}
+            />
+            <SafeguardCard
+              title="Reviewer-approved actions"
+              description="Risk classification assists the reviewer. Final dispute actions require approval and an audit trail."
+              healthy={isHealthy("ai_fallback") && isHealthy("human_approval") && isHealthy("external_submission")}
+            />
+          </div>
+        )}
+
+        {queueCheck?.status !== "passing" && (
+          <div className="mt-3 rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            Persistent background retries are not enabled for this environment.
+          </div>
+        )}
       </div>
     </div>
   );
