@@ -17,6 +17,7 @@
     "db:generate": "npx prisma generate",
     "db:migrate": "npx prisma migrate dev --name init",
     "db:seed": "node prisma/seed.js",
+    "db:backfill-merchant": "node scripts/backfill-merchant-ownership.js",
     "db:push": "npx prisma db push",
     "train:model": "node scripts/train-risk-model.js"
   },
