@@ -721,13 +721,18 @@ app.get("/api/webhooks/razorpay", (_req, res) => {
   });
 });
 
-app.get("/api/integrations/razorpay/status", (_req, res) => {
+app.get("/api/integrations/razorpay/status", (req, res) => {
   const config = getRazorpayConfig();
+  const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
+  const host = req.headers["x-forwarded-host"] || req.headers.host;
+  const appOrigin = process.env.PUBLIC_APP_URL || (host ? `${protocol}://${host}` : "");
   res.json({
     configured: config.configured,
     mode: config.mode,
     key_id: config.maskedKeyId,
     webhook_secret_configured: Boolean(process.env.RAZORPAY_WEBHOOK_SECRET),
+    webhook_url: appOrigin ? `${appOrigin}/api/webhooks/razorpay` : "/api/webhooks/razorpay",
+    required_event: "payment.dispute.created",
   });
 });
 
@@ -1425,7 +1430,7 @@ app.get("/api/reliability/export", async (req, res, next) => {
       exported_at: new Date().toISOString(),
       product: "ProofPilot AI",
       version: "1.0.0",
-      pitch: "Working AI Risk Manager prototype. Proves full dispute-readiness workflow: signed Razorpay webhooks, deterministic risk rules, evidence upload, backend metrics, AI-safe drafting, human approval, formal state machine, background job queue, and reliability tests.",
+      pitch: "Production-style AI Risk Manager workflow for dispute readiness: signed Razorpay webhooks, deterministic risk rules, evidence upload, backend metrics, AI-safe drafting, human approval, formal state machine, background job queue, and reliability tests.",
       architecture: evaluation.architecture,
       model: evaluation.model,
       live_metrics: evaluation.live_metrics,

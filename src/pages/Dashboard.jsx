@@ -32,7 +32,6 @@ import MetricsDashboard from "@/components/dashboard/MetricsDashboard";
 import AuditLogView from "@/components/dashboard/AuditLogView";
 import AnimatedValue from "@/components/dashboard/AnimatedValue";
 import ReliabilityDashboard from "@/components/dashboard/ReliabilityDashboard";
-import { SAMPLE_CASES } from "@/lib/sampleData";
 import { actionTone, scoreCase, EVIDENCE_LABELS, getRequired } from "@/lib/ruleEngine";
 import { calculateProofPilotMetrics, formatMoney } from "@/lib/metrics";
 import { fetchBackendMetrics } from "@/lib/metricsApi";
@@ -114,55 +113,6 @@ function todayPlus(days) {
   const date = new Date();
   date.setDate(date.getDate() + days);
   return date.toISOString().slice(0, 10);
-}
-
-function makeLocalCase(input, currentCount) {
-  const disputeType = input.dispute_type || "goods_not_received";
-  const defaults = DEFAULT_BY_TYPE[disputeType];
-  const next = String(currentCount + 1).padStart(4, "0");
-  const available = input.available_evidence || [];
-  const required = getRequired(disputeType);
-  const missing = required.filter((item) => !available.includes(item));
-  const base = {
-    id: `PP-2026-${next}`,
-    case_id: `PP-2026-${next}`,
-    payment_id: input.payment_id || `pay_pp_${Date.now().toString().slice(-8)}`,
-    order_id: input.order_id || `ord_pp_${Date.now().toString().slice(-8)}`,
-    dispute_id: input.dispute_id || `dsp_pp_${Date.now().toString().slice(-6)}`,
-    refund_id: input.refund_id || "",
-    arn: input.arn || "",
-    rrn: "",
-    utr: input.utr || "",
-    customer_name: input.customer_name || "New Customer",
-    customer_email: input.customer_email || "",
-    amount: Number(input.amount || 999),
-    currency: "INR",
-    payment_status: input.payment_status || defaults.payment_status,
-    refund_status: input.refund_status || defaults.refund_status,
-    delivery_status: input.delivery_status || defaults.delivery_status,
-    dispute_type: disputeType,
-    dispute_reason: input.dispute_reason || defaults.dispute_reason,
-    risk_score: 0,
-    readiness_score: 0,
-    confidence_score: 0,
-    customer_message: input.customer_message || defaults.customer_message,
-    case_summary: input.case_summary || `${TYPE_LABEL[disputeType]} case for ${input.customer_name || "new customer"}. ProofPilot created a proof checklist and response workflow.`,
-    available_evidence: available,
-    missing_evidence: missing,
-    timeline_events: [
-      { event: "payment.captured", timestamp: new Date().toISOString(), status: "ok", detail: `${formatMoney(input.amount || 999)} captured` },
-      { event: "proofpilot.case.created", timestamp: new Date().toISOString(), status: "alert", detail: "Proof checklist created from merchant input" },
-    ],
-    recommended_action: "escalate",
-    action_reason: "New case created. Awaiting proof readiness evaluation.",
-    deadline: input.deadline || todayPlus(7),
-    owner: input.owner || "Ops Reviewer",
-    team: input.team || "Operations",
-    packet_status: "draft",
-    merchant_response_draft: input.merchant_response_draft || "We acknowledge the customer claim. Our team is reviewing payment, refund, delivery, and communication evidence before taking a final action.",
-    audit_log: [{ timestamp: new Date().toISOString(), actor: "Merchant Ops", action: "case_created", detail: "Case added in ProofPilot AI" }],
-  };
-  return { ...base, ...scoreCase(base) };
 }
 
 function isManualCase(caseItem) {
@@ -385,15 +335,23 @@ function TrackFitPanel() {
   );
 }
 
+function getDefaultWebhookUrl(status) {
+  if (status?.webhook_url) return status.webhook_url;
+  if (typeof window === "undefined") return "/api/webhooks/razorpay";
+  const isLocal = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+  const origin = isLocal ? "https://proofpilot-ai.onrender.com" : window.location.origin;
+  return `${origin}/api/webhooks/razorpay`;
+}
+
 function DataStatusStrip({ dataSource, loading, error, lastSynced, razorpayStatus, onConnectRazorpay, onSyncRazorpay, syncingRazorpay }) {
   const connected = !loading && !error && dataSource === "secure case store";
   const razorpayConnected = Boolean(razorpayStatus?.configured);
   const sources = [
-    { icon: Database, label: "Case store", value: connected ? "Secure case store" : "Review workspace", ok: connected },
-    { icon: IndianRupee, label: "Payments", value: razorpayConnected ? "Payment signals active" : "Payment signals pending", ok: razorpayConnected },
-    { icon: PackageCheck, label: "Fulfillment", value: "Delivery and refund proof", ok: true },
-    { icon: MessageSquare, label: "Complaint", value: "Customer claim signals", ok: true },
-    { icon: UploadCloud, label: "Webhook", value: razorpayStatus?.webhook_secret_configured ? "Verified event intake" : "Event intake pending", ok: Boolean(razorpayStatus?.webhook_secret_configured) },
+    { icon: Database, label: "Case store", value: connected ? "Secure case store" : "Awaiting secure API", ok: connected },
+    { icon: IndianRupee, label: "Payments", value: razorpayConnected ? "Razorpay connected" : "Awaiting connection", ok: razorpayConnected },
+    { icon: PackageCheck, label: "Evidence", value: "Fulfillment proof ready", ok: true },
+    { icon: MessageSquare, label: "Claims", value: "Complaint parser ready", ok: true },
+    { icon: UploadCloud, label: "Webhook", value: razorpayStatus?.webhook_secret_configured ? "Signature verified" : "Setup required", ok: Boolean(razorpayStatus?.webhook_secret_configured) },
   ];
 
   return (
@@ -405,7 +363,7 @@ function DataStatusStrip({ dataSource, loading, error, lastSynced, razorpayStatu
           </span>
           <div>
             <div className="text-sm font-semibold text-slate-900">
-              {loading ? "Syncing merchant action queue" : connected ? "Merchant dispute workspace connected" : "Merchant dispute workspace ready"}
+              {loading ? "Syncing merchant risk workspace" : connected ? "Merchant risk workspace connected" : "Merchant risk workspace ready"}
             </div>
             <p className="mt-0.5 text-xs text-slate-500">
               {error || (lastSynced ? `Last synced ${lastSynced.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}` : "Waiting for first sync")}
@@ -455,12 +413,12 @@ function RazorpayConnectModal({ open, onClose, razorpayStatus, onSyncRazorpay, s
   const configured = Boolean(razorpayStatus?.configured);
   const webhookConfigured = Boolean(razorpayStatus?.webhook_secret_configured);
   const mode = razorpayStatus?.mode || "unknown";
-  const webhookUrl = `${window.location.origin}/api/webhooks/razorpay`;
+  const webhookUrl = getDefaultWebhookUrl(razorpayStatus);
   const items = [
-    { icon: KeyRound, label: "API credentials", value: configured ? `${mode} mode configured` : "Server credentials pending", ok: configured },
+    { icon: KeyRound, label: "API credentials", value: configured ? `${mode} mode active` : "Not connected", ok: configured },
     { icon: Webhook, label: "Webhook endpoint", value: webhookUrl, ok: true },
-    { icon: ShieldCheck, label: "Webhook secret", value: webhookConfigured ? "Signature verification enabled" : "Secret pending", ok: webhookConfigured },
-    { icon: Radar, label: "Required event", value: "payment.dispute.created", ok: true },
+    { icon: ShieldCheck, label: "Webhook security", value: webhookConfigured ? "Signature verification enabled" : "Secret not configured", ok: webhookConfigured },
+    { icon: Radar, label: "Event intake", value: razorpayStatus?.required_event || "payment.dispute.created", ok: true },
   ];
 
   return (
@@ -475,7 +433,7 @@ function RazorpayConnectModal({ open, onClose, razorpayStatus, onSyncRazorpay, s
             </div>
             <h2 className="mt-3 text-lg font-semibold text-slate-950">Connect Razorpay</h2>
             <p className="mt-1 text-sm leading-relaxed text-slate-500">
-              This prototype uses server-side Razorpay test credentials. The webhook brings disputes into ProofPilot automatically, and sync is the fallback when a delivery is missed.
+              ProofPilot connects to Razorpay with secure server-side credentials. Signed dispute webhooks create cases automatically, and manual sync can backfill missed or existing disputes.
             </p>
           </div>
           <button
@@ -502,12 +460,12 @@ function RazorpayConnectModal({ open, onClose, razorpayStatus, onSyncRazorpay, s
             })}
           </div>
           <div className="rounded-lg border border-slate-200 bg-white p-4">
-            <h3 className="text-sm font-semibold text-slate-900">Merchant setup steps</h3>
+            <h3 className="text-sm font-semibold text-slate-900">Connection checklist</h3>
             <div className="mt-3 grid gap-2 text-sm text-slate-600">
-              <div>1. Keep Razorpay keys only in Render environment variables.</div>
-              <div>2. Add the webhook URL in Razorpay Dashboard.</div>
-              <div>3. Select only <span className="font-mono text-slate-900">payment.dispute.created</span> for this Risk Manager flow.</div>
-              <div>4. Use Sync disputes if webhook delivery fails or you want to backfill existing disputes.</div>
+              <div>1. Store Razorpay API keys in the server environment.</div>
+              <div>2. Add the webhook endpoint in Razorpay Dashboard.</div>
+              <div>3. Enable <span className="font-mono text-slate-900">payment.dispute.created</span> for dispute intake.</div>
+              <div>4. Run manual sync to backfill disputes or recover from webhook delivery issues.</div>
             </div>
           </div>
           {syncMessage ? (
@@ -569,7 +527,7 @@ function OverviewHome({ cases, metrics, onSelectCase, onNavigate, dataSource, lo
                 Open action queue <ArrowRight className="h-3.5 w-3.5" />
               </button>
               <button onClick={onConnectRazorpay} className="inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 hover:bg-emerald-100">
-                <PlugZap className="h-3.5 w-3.5" /> Connect Razorpay
+                <PlugZap className="h-3.5 w-3.5" /> Razorpay setup
               </button>
               <button onClick={() => onNavigate("metrics")} className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">
                 View model impact
@@ -579,7 +537,7 @@ function OverviewHome({ cases, metrics, onSelectCase, onNavigate, dataSource, lo
           <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
             <ImpactCard icon={IndianRupee} label="Ready To Recover" value={formatMoney(metrics.recoverableValue)} hint={`${metrics.contestReadyCases} contest-ready packets`} tone="emerald" />
             <ImpactCard icon={TrendingUp} label="Net Merchant Benefit" value={formatMoney(metrics.netBenefit)} hint="recoverable value minus review cost" tone="blue" />
-            <ImpactCard icon={UserCheck} label="Human Queue" value={metrics.awaitingApprovalCases} hint="pending final decision" tone="slate" />
+            <ImpactCard icon={UserCheck} label="Human Queue" value={metrics.awaitingApprovalCases} hint="awaiting final decision" tone="slate" />
           </div>
         </div>
       </section>
@@ -832,16 +790,16 @@ function NewCaseModal({ open, onClose, onSubmit }) {
 }
 export default function Dashboard() {
   const { user, logout } = useAuth();
-  const [cases, setCases] = useState(() => SAMPLE_CASES.map((item) => ({ ...item, id: item.case_id })));
+  const [cases, setCases] = useState([]);
   const [active, setActive] = useState("overview");
   const [caseTab, setCaseTab] = useState("evidence-passport");
-  const [selectedId, setSelectedId] = useState(SAMPLE_CASES[0]?.case_id || null);
+  const [selectedId, setSelectedId] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [recentlyAttached, setRecentlyAttached] = useState([]);
   const [attachments, setAttachments] = useState({});
   const [casePanelOpen, setCasePanelOpen] = useState(false);
   const [newCaseOpen, setNewCaseOpen] = useState(false);
-  const [dataSource, setDataSource] = useState("sample workspace");
+  const [dataSource, setDataSource] = useState("secure case store");
   const [dataLoading, setDataLoading] = useState(true);
   const [dataError, setDataError] = useState("");
   const [lastSynced, setLastSynced] = useState(null);
@@ -849,7 +807,7 @@ export default function Dashboard() {
   const [razorpaySetupOpen, setRazorpaySetupOpen] = useState(false);
   const [razorpaySyncing, setRazorpaySyncing] = useState(false);
   const [razorpaySyncMessage, setRazorpaySyncMessage] = useState("");
-  const [backendMetrics, setBackendMetrics] = useState(() => calculateProofPilotMetrics(SAMPLE_CASES));
+  const [backendMetrics, setBackendMetrics] = useState(() => calculateProofPilotMetrics([]));
 
   const refreshMetrics = async (fallbackCases = cases) => {
     try {
@@ -868,7 +826,7 @@ export default function Dashboard() {
     setDataError("");
     try {
       const res = await apiFetch("/api/cases");
-      if (!res.ok) throw new Error("API unavailable");
+      if (!res.ok) throw new Error("Secure API connection unavailable");
       const rows = await res.json();
       if (!Array.isArray(rows)) throw new Error("Unexpected case response");
       const normalized = rows.map((item) => ({ ...item, id: item.id || item.case_id }));
@@ -879,9 +837,11 @@ export default function Dashboard() {
       await refreshMetrics(normalized);
       return normalized;
     } catch (error) {
-      setDataSource("sample workspace");
-      setDataError("API unavailable; showing bundled sample cases");
-      await refreshMetrics(SAMPLE_CASES);
+      setCases([]);
+      setSelectedId(null);
+      setDataSource("secure case store");
+      setDataError("Secure API is unavailable. Cases will appear after the backend connection is restored.");
+      await refreshMetrics([]);
       throw error;
     } finally {
       setDataLoading(false);
@@ -1015,8 +975,7 @@ export default function Dashboard() {
       replaceCase(nextCase);
       await refreshMetrics();
     } catch {
-      setDataSource("sample workspace");
-      setDataError("Evidence upload could not be saved to the backend. The local case view was updated only for this session.");
+      setDataError("Evidence upload could not be saved. Please retry after the backend connection is restored.");
     }
   };
 
@@ -1044,7 +1003,7 @@ export default function Dashboard() {
         await refreshMetrics();
       }
     } catch {
-      setDataSource("sample workspace");
+      setDataError("Decision could not be saved. Please retry after the backend connection is restored.");
     }
   };
 
@@ -1064,7 +1023,8 @@ export default function Dashboard() {
         await refreshMetrics();
       }
     } catch {
-      setDataSource("sample workspace");
+      setDataSource("secure case store");
+      setDataError("Draft could not be saved. Please retry after the backend connection is restored.");
     }
   };
 
@@ -1083,8 +1043,7 @@ export default function Dashboard() {
         await refreshMetrics();
       }
     } catch {
-      setDataSource("sample workspace");
-      setDataError("API unavailable; export recorded only in local session");
+      setDataError("Packet export could not be saved. Please retry after the backend connection is restored.");
     }
   };
 
@@ -1140,7 +1099,7 @@ export default function Dashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
       });
-      if (!res.ok) throw new Error("API unavailable");
+      if (!res.ok) throw new Error("Secure API connection unavailable");
       const created = await res.json();
       setCases((prev) => [created, ...prev]);
       setSelectedId(created.id);
@@ -1149,13 +1108,7 @@ export default function Dashboard() {
       setDataSource("secure case store");
       await refreshMetrics();
     } catch {
-      const created = makeLocalCase(input, cases.length);
-      setCases((prev) => [created, ...prev]);
-      setSelectedId(created.id);
-      setActive("risk-queue");
-      setCasePanelOpen(true);
-      setDataSource("sample workspace");
-      await refreshMetrics([created, ...cases]);
+      setDataError("Case could not be created. Please check the backend connection and try again.");
     }
   };
 
