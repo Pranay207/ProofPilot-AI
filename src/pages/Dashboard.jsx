@@ -489,20 +489,21 @@ function NewCaseModal({ open, onClose, onSubmit }) {
     deadline: todayPlus(7),
     team: "Operations",
     owner: "Ops Reviewer",
-    available_evidence: ["invoice", "customer communication"],
+    available_evidence: [],
+    evidence_files: {},
     customer_message: DEFAULT_BY_TYPE.goods_not_received.customer_message,
   }));
 
   const defaults = DEFAULT_BY_TYPE[form.dispute_type];
   const required = useMemo(() => getRequired(form.dispute_type), [form.dispute_type]);
   const previewScores = useMemo(() => {
-    const available = form.available_evidence || [];
     const preview = {
       ...defaults,
       ...form,
       amount: Number(form.amount || 0),
-      available_evidence: available,
-      missing_evidence: required.filter((key) => !available.includes(key)),
+      available_evidence: [],
+      missing_evidence: required,
+      evidence_files: {},
       payment_id: form.payment_id || "pay_preview",
       order_id: form.order_id || "ord_preview",
       dispute_id: form.dispute_id || "dsp_preview",
@@ -515,18 +516,6 @@ function NewCaseModal({ open, onClose, onSubmit }) {
 
   const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
 
-  const toggleEvidence = (key) => {
-    setForm((prev) => {
-      const has = prev.available_evidence.includes(key);
-      return {
-        ...prev,
-        available_evidence: has
-          ? prev.available_evidence.filter((item) => item !== key)
-          : [...prev.available_evidence, key],
-      };
-    });
-  };
-
   const changeType = (type) => {
     const nextDefaults = DEFAULT_BY_TYPE[type];
     setForm((prev) => ({
@@ -537,7 +526,8 @@ function NewCaseModal({ open, onClose, onSubmit }) {
       payment_status: nextDefaults.payment_status,
       refund_status: nextDefaults.refund_status,
       delivery_status: nextDefaults.delivery_status,
-      available_evidence: getRequired(type).slice(0, 2),
+      available_evidence: [],
+      evidence_files: {},
     }));
   };
 
@@ -638,13 +628,12 @@ function NewCaseModal({ open, onClose, onSubmit }) {
             </label>
 
             <div>
-              <div className="text-xs font-medium text-slate-600">Available evidence</div>
+              <div className="text-xs font-medium text-slate-600">Required proof after case creation</div>
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
                 {required.map((key) => (
-                  <label key={key} className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700">
-                    <input type="checkbox" checked={form.available_evidence.includes(key)} onChange={() => toggleEvidence(key)} className="h-4 w-4 rounded border-slate-300" />
+                  <div key={key} className="rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700">
                     {EVIDENCE_LABELS[key] || key}
-                  </label>
+                  </div>
                 ))}
               </div>
             </div>
@@ -779,9 +768,19 @@ export default function Dashboard() {
   const handleAttach = async (evidenceKey, uploadPayload = {}) => {
     if (!selected) return;
     const fileName = uploadPayload.fileName || uploadPayload.file_name || "";
+    const uploadedFile = fileName ? {
+      file_name: fileName,
+      mime_type: uploadPayload.mimeType,
+      size_bytes: uploadPayload.size,
+      uploaded_at: new Date().toISOString(),
+      storage_status: "Syncing",
+    } : null;
+    const evidenceFiles = uploadedFile
+      ? { ...(selected.evidence_files || {}), [evidenceKey]: uploadedFile }
+      : selected.evidence_files || {};
     const available = [...new Set([...(selected.available_evidence || []), evidenceKey])];
     const missing = (selected.missing_evidence || []).filter((e) => e !== evidenceKey);
-    const scores = scoreCase({ ...selected, available_evidence: available, missing_evidence: missing });
+    const scores = scoreCase({ ...selected, available_evidence: available, missing_evidence: missing, evidence_files: evidenceFiles });
     const audit = {
       timestamp: new Date().toISOString(),
       actor: "Evidence Radar",
@@ -794,18 +793,12 @@ export default function Dashboard() {
       ...scores,
       audit_log: [...(selected.audit_log || []), audit],
     };
-    if (fileName) {
+    if (uploadedFile) {
       setAttachments((prev) => ({
         ...prev,
         [selected.id]: {
           ...(prev[selected.id] || {}),
-          [evidenceKey]: {
-            file_name: fileName,
-            mime_type: uploadPayload.mimeType,
-            size_bytes: uploadPayload.size,
-            uploaded_at: new Date().toISOString(),
-            storage_status: "Saving",
-          },
+          [evidenceKey]: uploadedFile,
         },
       }));
     }
@@ -846,10 +839,13 @@ export default function Dashboard() {
     const missing = required.includes(evidenceKey)
       ? [...new Set([...(selected.missing_evidence || []), evidenceKey])]
       : selected.missing_evidence || [];
-    const scores = scoreCase({ ...selected, available_evidence: available, missing_evidence: missing });
+    const evidenceFiles = { ...(selected.evidence_files || {}) };
+    delete evidenceFiles[evidenceKey];
+    const scores = scoreCase({ ...selected, available_evidence: available, missing_evidence: missing, evidence_files: evidenceFiles });
     updateCase(selected.id, {
       available_evidence: available,
       missing_evidence: missing,
+      evidence_files: evidenceFiles,
       ...scores,
     });
     setAttachments((prev) => {

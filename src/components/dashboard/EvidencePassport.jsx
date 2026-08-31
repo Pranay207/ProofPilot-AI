@@ -98,8 +98,8 @@ export default function EvidencePassport({ caseItem, onAttach, onRemove, attachm
                     />
                   )}
                   {available && !file && (
-                    <div className="mt-2 flex items-center justify-between gap-3 rounded-md border border-amber-100 bg-amber-50 p-2">
-                      <span className="text-xs text-amber-800">Confirmed in case record. Attach a source file for the packet.</span>
+                    <div className="mt-2 flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 p-2">
+                      <span className="text-xs text-slate-500">Record available. Add a file when source proof is needed.</span>
                       <AttachProofButton label="Add file" compact onUploaded={(payload) => onAttach?.(e, payload)} />
                     </div>
                   )}

@@ -200,6 +200,22 @@ function cleanText(value) {
 
 function toFrontendCase(row) {
   const evidence = row.evidenceItems || [];
+  const evidenceFiles = evidence.reduce((files, item) => {
+    if (item.fileName) {
+      files[item.key] = {
+        file_name: item.fileName,
+        mime_type: item.mimeType,
+        size_bytes: item.sizeBytes,
+        storage_provider: item.storageProvider,
+        storage_status: item.storageProvider === "s3" ? "Cloud storage" : item.storageProvider ? "Local storage" : "Attached",
+        uploaded_at: item.attachedAt?.toISOString?.() || item.attachedAt,
+        download_url: `/api/cases/${encodeURIComponent(row.caseId)}/evidence-files/${encodeURIComponent(item.key)}`,
+      };
+    }
+    return files;
+  }, {});
+  const fileBackedEvidence = new Set(Object.keys(evidenceFiles));
+  const requiredEvidence = getRequired(row.disputeType);
   const item = {
     id: row.caseId,
     case_id: row.caseId,
@@ -224,22 +240,9 @@ function toFrontendCase(row) {
     confidence_score: row.confidenceScore,
     customer_message: cleanText(row.customerMessage),
     case_summary: cleanText(row.caseSummary),
-    available_evidence: evidence.filter((item) => item.status === "available").map((item) => item.key),
-    missing_evidence: evidence.filter((item) => item.status === "missing").map((item) => item.key),
-    evidence_files: evidence.reduce((files, item) => {
-      if (item.fileName) {
-        files[item.key] = {
-          file_name: item.fileName,
-          mime_type: item.mimeType,
-          size_bytes: item.sizeBytes,
-          storage_provider: item.storageProvider,
-          storage_status: item.storageProvider === "s3" ? "Cloud storage" : item.storageProvider ? "Local storage" : "Attached",
-          uploaded_at: item.attachedAt?.toISOString?.() || item.attachedAt,
-          download_url: `/api/cases/${encodeURIComponent(row.caseId)}/evidence-files/${encodeURIComponent(item.key)}`,
-        };
-      }
-      return files;
-    }, {}),
+    available_evidence: evidence.filter((item) => item.status === "available" && fileBackedEvidence.has(item.key)).map((item) => item.key),
+    missing_evidence: requiredEvidence.filter((key) => !fileBackedEvidence.has(key)),
+    evidence_files: evidenceFiles,
     timeline_events: (row.timelineEvents || [])
       .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
       .map((item) => ({ event: cleanText(item.event), timestamp: item.timestamp, status: item.status, detail: cleanText(item.detail) })),
@@ -469,6 +472,7 @@ function buildCasePayload(body, currentCount = 0) {
     case_summary: body.case_summary || `${(body.dispute_type || disputeType).replace(/_/g, " ")} case created from merchant input.`,
     available_evidence: available,
     missing_evidence: missing,
+    evidence_files: body.evidence_files || {},
     timeline_events: [
       { event: "payment.captured", timestamp: new Date().toISOString(), status: "ok", detail: `INR ${Number(body.amount || 999).toLocaleString("en-IN")} captured` },
       { event: "proofpilot.case.created", timestamp: new Date().toISOString(), status: "alert", detail: "Evidence passport created from merchant input" },

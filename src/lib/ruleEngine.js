@@ -51,14 +51,41 @@ export function getRequired(disputeType) {
 }
 
 export function hasEvidence(caseItem, key) {
-  return caseItem.available_evidence?.some((e) => e.toLowerCase() === key.toLowerCase());
+  const files = caseItem.evidence_files || {};
+  const exact = files[key];
+  if (exact) {
+    return typeof exact === "string"
+      ? Boolean(exact.trim())
+      : Boolean(exact.file_name || exact.download_url || exact.storage_key || exact.upload_id);
+  }
+  const match = Object.entries(files).find(([fileKey]) => fileKey.toLowerCase() === key.toLowerCase());
+  if (!match) return false;
+  const file = match[1];
+  return typeof file === "string"
+    ? Boolean(file.trim())
+    : Boolean(file.file_name || file.download_url || file.storage_key || file.upload_id);
+}
+
+export function normalizeEvidenceForScoring(caseItem) {
+  const required = getRequired(caseItem.dispute_type);
+  const fileKeys = Object.keys(caseItem.evidence_files || {});
+  const available = [...new Set([
+    ...required.filter((key) => hasEvidence(caseItem, key)),
+    ...fileKeys.filter((key) => hasEvidence(caseItem, key)),
+  ])];
+  return {
+    ...caseItem,
+    available_evidence: available,
+    missing_evidence: required.filter((key) => !hasEvidence(caseItem, key)),
+  };
 }
 
 // Recompute readiness from evidence coverage.
 export function computeReadiness(caseItem) {
+  const normalized = normalizeEvidenceForScoring(caseItem);
   const required = getRequired(caseItem.dispute_type);
   if (!required.length) return caseItem.confidence_score || 0;
-  const have = required.filter((k) => hasEvidence(caseItem, k)).length;
+  const have = required.filter((k) => hasEvidence(normalized, k)).length;
   return Math.round((have / required.length) * 100);
 }
 
@@ -78,12 +105,13 @@ function daysUntil(dateValue) {
 }
 
 export function computeRiskScore(caseItem) {
+  const normalized = normalizeEvidenceForScoring(caseItem);
   const type = caseItem.dispute_type;
   const amount = Number(caseItem.amount || 0);
-  const missing = new Set(caseItem.missing_evidence || []);
+  const missing = new Set(normalized.missing_evidence || []);
   const complaint = `${caseItem.customer_message || ""} ${caseItem.dispute_reason || ""}`.toLowerCase();
   const deadlineDays = daysUntil(caseItem.deadline);
-  const model = predictLossRisk(caseItem, getRequired(type));
+  const model = predictLossRisk(normalized, getRequired(type));
   let score = model.score;
   score += {
     goods_not_received: 45,
@@ -148,7 +176,8 @@ export function computeRiskScore(caseItem) {
 }
 
 export function computeConfidenceScore(caseItem) {
-  const readiness = computeReadiness(caseItem);
+  const normalized = normalizeEvidenceForScoring(caseItem);
+  const readiness = computeReadiness(normalized);
   const hasIds = Boolean(caseItem.payment_id && caseItem.order_id && caseItem.dispute_id);
   const hasComplaint = Boolean((caseItem.customer_message || "").trim());
   const hasTimeline = (caseItem.timeline_events || []).length >= 2;
@@ -160,28 +189,31 @@ export function computeConfidenceScore(caseItem) {
   if (hasTimeline) score += 8;
   if (getRequired(type).length) score += 6;
 
-  if (type === "goods_not_received" && hasEvidence(caseItem, "delivery proof")) score += 10;
-  if (type === "goods_not_received" && !hasEvidence(caseItem, "delivery proof")) score -= 8;
-  if (type === "refund_not_processed" && (caseItem.arn || hasEvidence(caseItem, "arn"))) score += 8;
-  if (type === "refund_not_processed" && !(caseItem.arn || hasEvidence(caseItem, "arn"))) score -= 6;
-  if (type === "duplicate_payment" && hasEvidence(caseItem, "order mapping")) score += 8;
-  if (type === "unauthorized_transaction" && hasEvidence(caseItem, "authorization proof") && hasEvidence(caseItem, "risk check")) score += 10;
-  if (type === "unauthorized_transaction" && !hasEvidence(caseItem, "authorization proof")) score -= 8;
-  if (type === "product_not_as_described" && hasEvidence(caseItem, "product description") && hasEvidence(caseItem, "product photos")) score += 8;
-  if (type === "product_not_as_described" && !hasEvidence(caseItem, "product description")) score -= 6;
-  if (type === "cancelled_subscription" && hasEvidence(caseItem, "cancellation log")) score += 8;
-  if (type === "cancelled_subscription" && !hasEvidence(caseItem, "cancellation log")) score -= 8;
+  if (type === "goods_not_received" && hasEvidence(normalized, "delivery proof")) score += 10;
+  if (type === "goods_not_received" && !hasEvidence(normalized, "delivery proof")) score -= 8;
+  if (type === "refund_not_processed" && hasEvidence(normalized, "arn")) score += 8;
+  if (type === "refund_not_processed" && !hasEvidence(normalized, "arn")) score -= 6;
+  if (type === "duplicate_payment" && hasEvidence(normalized, "order mapping")) score += 8;
+  if (type === "unauthorized_transaction" && hasEvidence(normalized, "authorization proof") && hasEvidence(normalized, "risk check")) score += 10;
+  if (type === "unauthorized_transaction" && !hasEvidence(normalized, "authorization proof")) score -= 8;
+  if (type === "product_not_as_described" && hasEvidence(normalized, "product description") && hasEvidence(normalized, "product photos")) score += 8;
+  if (type === "product_not_as_described" && !hasEvidence(normalized, "product description")) score -= 6;
+  if (type === "cancelled_subscription" && hasEvidence(normalized, "cancellation log")) score += 8;
+  if (type === "cancelled_subscription" && !hasEvidence(normalized, "cancellation log")) score -= 8;
 
   return clampScore(score);
 }
 
 export function scoreCase(caseItem) {
-  const readiness = computeReadiness(caseItem);
-  const confidence = computeConfidenceScore({ ...caseItem, readiness_score: readiness });
-  const risk = computeRiskScore({ ...caseItem, readiness_score: readiness, confidence_score: confidence });
-  const model = predictLossRisk({ ...caseItem, readiness_score: readiness, confidence_score: confidence }, getRequired(caseItem.dispute_type));
-  const decision = recommend({ ...caseItem, readiness_score: readiness, confidence_score: confidence, risk_score: risk });
+  const normalized = normalizeEvidenceForScoring(caseItem);
+  const readiness = computeReadiness(normalized);
+  const confidence = computeConfidenceScore({ ...normalized, readiness_score: readiness });
+  const risk = computeRiskScore({ ...normalized, readiness_score: readiness, confidence_score: confidence });
+  const model = predictLossRisk({ ...normalized, readiness_score: readiness, confidence_score: confidence }, getRequired(caseItem.dispute_type));
+  const decision = recommend({ ...normalized, readiness_score: readiness, confidence_score: confidence, risk_score: risk });
   return {
+    available_evidence: normalized.available_evidence,
+    missing_evidence: normalized.missing_evidence,
     risk_score: risk,
     readiness_score: readiness,
     confidence_score: confidence,
@@ -194,6 +226,7 @@ export function scoreCase(caseItem) {
 
 // Core decision rules.
 export function recommend(caseItem) {
+  const normalized = normalizeEvidenceForScoring(caseItem);
   const confidence = caseItem.confidence_score ?? 0;
   const type = caseItem.dispute_type;
 
@@ -203,15 +236,15 @@ export function recommend(caseItem) {
   }
 
   if (type === "goods_not_received") {
-    if (hasEvidence(caseItem, "delivery proof")) {
+    if (hasEvidence(normalized, "delivery proof")) {
       return { action: "contest", reason: "Goods not received claim but delivery proof exists - contest." };
     }
     return { action: "escalate", reason: "Goods not received and delivery proof missing - escalate." };
   }
 
   if (type === "refund_not_processed") {
-    const hasArn = caseItem.arn || hasEvidence(caseItem, "arn");
-    const hasRefundId = caseItem.refund_id || hasEvidence(caseItem, "refund id") || hasEvidence(caseItem, "refund proof");
+    const hasArn = hasEvidence(normalized, "arn");
+    const hasRefundId = hasEvidence(normalized, "refund id") || hasEvidence(normalized, "refund proof");
     if (hasArn && hasRefundId) {
       return { action: "contest", reason: "Refund processed with ARN + refund ID on record - contest/explain." };
     }
@@ -227,24 +260,24 @@ export function recommend(caseItem) {
   }
 
   if (type === "unauthorized_transaction") {
-    if (hasEvidence(caseItem, "authorization proof") && hasEvidence(caseItem, "risk check") && hasEvidence(caseItem, "device fingerprint")) {
+    if (hasEvidence(normalized, "authorization proof") && hasEvidence(normalized, "risk check") && hasEvidence(normalized, "device fingerprint")) {
       return { action: "contest", reason: "Authorization, risk checks, and device proof are available - contest." };
     }
     return { action: "escalate", reason: "Unauthorized claim needs authorization and device proof before contesting." };
   }
 
   if (type === "product_not_as_described") {
-    if (hasEvidence(caseItem, "product description") && hasEvidence(caseItem, "product photos") && hasEvidence(caseItem, "merchant policy")) {
+    if (hasEvidence(normalized, "product description") && hasEvidence(normalized, "product photos") && hasEvidence(normalized, "merchant policy")) {
       return { action: "contest", reason: "Catalog, product condition, and policy proof support merchant position - contest." };
     }
     return { action: "escalate", reason: "Product-quality claim needs catalog, photo, and policy proof before contesting." };
   }
 
   if (type === "cancelled_subscription") {
-    if (hasEvidence(caseItem, "cancellation log")) {
+    if (hasEvidence(normalized, "cancellation log")) {
       return { action: "accept", reason: "Cancellation proof exists before renewal charge - accept/refund." };
     }
-    if (hasEvidence(caseItem, "subscription agreement") && hasEvidence(caseItem, "billing history") && hasEvidence(caseItem, "renewal notice")) {
+    if (hasEvidence(normalized, "subscription agreement") && hasEvidence(normalized, "billing history") && hasEvidence(normalized, "renewal notice")) {
       return { action: "contest", reason: "Subscription agreement, billing history, and renewal notice support the charge - contest." };
     }
     return { action: "escalate", reason: "Subscription dispute needs cancellation and billing proof before decision." };

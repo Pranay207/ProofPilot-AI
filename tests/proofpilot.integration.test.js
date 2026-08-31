@@ -15,6 +15,7 @@ delete process.env.EVIDENCE_S3_BUCKET;
 
 const { app } = await import("../server/index.js");
 const { withAiTimeout } = await import("../src/lib/aiGuardrails.js");
+const { getRequired } = await import("../src/lib/ruleEngine.js");
 
 let server;
 let baseUrl;
@@ -130,13 +131,30 @@ describe("ProofPilot production guardrails", () => {
       contentBase64: Buffer.from(content).toString("base64"),
     };
 
-    const attached = await json("/api/cases/PP-2026-0001/evidence", {
+    let attached = await json("/api/cases/PP-2026-0001/evidence", {
       method: "PATCH",
       body: JSON.stringify(payload),
     });
 
     assert.equal(attached.response.status, 200);
     assert.equal(attached.body.evidence_files["delivery proof"].file_name, payload.fileName);
+
+    for (const evidenceKey of getRequired("goods_not_received").filter((key) => key !== "delivery proof")) {
+      const proofContent = `integration proof for ${evidenceKey}`;
+      attached = await json("/api/cases/PP-2026-0001/evidence", {
+        method: "PATCH",
+        body: JSON.stringify({
+          evidenceKey,
+          fileName: `${evidenceKey.replaceAll(" ", "-")}.txt`,
+          mimeType: "text/plain",
+          size: Buffer.byteLength(proofContent),
+          contentBase64: Buffer.from(proofContent).toString("base64"),
+        }),
+      });
+      assert.equal(attached.response.status, 200);
+      assert.equal(attached.body.evidence_files[evidenceKey].file_name, `${evidenceKey.replaceAll(" ", "-")}.txt`);
+    }
+
     assert.ok(attached.body.readiness_score >= 80);
 
     const download = await fetch(`${baseUrl}${attached.body.evidence_files["delivery proof"].download_url}`);
