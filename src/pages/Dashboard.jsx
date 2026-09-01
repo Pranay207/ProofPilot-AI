@@ -2,10 +2,12 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   ArrowRight,
+  ChevronDown,
   CheckCircle2,
   Database,
   FileCheck2,
   IndianRupee,
+  Info,
   Loader2,
   Menu,
   MessageSquare,
@@ -157,21 +159,41 @@ function ImpactCard({ icon: Icon, label, value, hint, tone }) {
     amber: "bg-amber-50 text-amber-700 border-amber-100",
     blue: "bg-blue-50 text-blue-700 border-blue-100",
     slate: "bg-slate-50 text-slate-700 border-slate-200",
+    red: "bg-red-50 text-red-700 border-red-100",
   };
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4">
+    <div className="min-w-0 rounded-lg border border-slate-200 bg-white p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</div>
-          <AnimatedValue value={value} className="mt-2 block text-2xl font-semibold tracking-tight text-slate-950 tabular-nums" />
-          <div className="mt-1 text-xs leading-relaxed text-slate-500">{hint}</div>
+          <div className="text-xs font-medium text-slate-600">{label}</div>
+          <AnimatedValue value={value} className="mt-1 block text-2xl font-semibold tracking-tight text-slate-950 tabular-nums" />
+          <div className="mt-1 text-xs font-medium leading-relaxed text-slate-600">{hint}</div>
         </div>
         <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md border ${tones[tone]}`}>
           <Icon className="h-4 w-4" />
         </span>
       </div>
     </div>
+  );
+}
+
+function KpiBar({ metrics }) {
+  const proofTotal = Math.max(Number(metrics.openCases || 0), 0);
+  const readyHint = metrics.contestReadyCases
+    ? `${metrics.contestReadyCases} contest-ready packet${metrics.contestReadyCases === 1 ? "" : "s"}`
+    : "No contest-ready packets";
+  const benefitHint = Number(metrics.netBenefit || 0) >= 0 ? "estimated recoverable value" : "review cost exceeds ready value";
+
+  return (
+    <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+      <ImpactCard icon={Radar} label="Cases Needing Action" value={metrics.openCases} hint={`${metrics.highRiskCases} high risk | ${metrics.totalCases} total`} tone="amber" />
+      <ImpactCard icon={FileCheck2} label="Proof Ready" value={`${metrics.evidenceReadyCases}/${proofTotal}`} hint={readyHint} tone="emerald" />
+      <ImpactCard icon={UserCheck} label="Waiting For Decision" value={metrics.awaitingApprovalCases} hint="reviewer approval required" tone="slate" />
+      <ImpactCard icon={IndianRupee} label="Money At Risk" value={formatMoney(metrics.valueAtRisk)} hint="open draft/escalated cases" tone="blue" />
+      <ImpactCard icon={IndianRupee} label="Ready To Recover" value={formatMoney(metrics.recoverableValue)} hint={readyHint} tone="emerald" />
+      <ImpactCard icon={TrendingUp} label="Net Merchant Benefit" value={formatMoney(metrics.netBenefit)} hint={benefitHint} tone={Number(metrics.netBenefit || 0) >= 0 ? "blue" : "red"} />
+    </section>
   );
 }
 
@@ -195,8 +217,9 @@ function WorkflowStep({ icon: Icon, title, text, index, isLast }) {
 
 function PriorityBoard({ cases, onSelectCase, onOpenQueue }) {
   const urgent = [...cases]
+    .filter((caseItem) => ["draft", "escalated"].includes(caseItem.packet_status || "draft"))
     .sort((a, b) => (b.risk_score - b.readiness_score) - (a.risk_score - a.readiness_score))
-    .slice(0, 4);
+    .slice(0, 7);
 
   const priorityReason = (caseItem) => {
     const missing = caseItem.missing_evidence || [];
@@ -212,21 +235,30 @@ function PriorityBoard({ cases, onSelectCase, onOpenQueue }) {
     return "Needs human review";
   };
 
+  const readinessPill = (value) => {
+    if (value >= 80) return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    if (value >= 40) return "border-amber-200 bg-amber-50 text-amber-700";
+    return "border-slate-200 bg-slate-100 text-slate-700";
+  };
+
   return (
-    <div className="rounded-lg border border-slate-200 bg-white">
+    <div className="flex min-h-[430px] flex-1 flex-col rounded-lg border border-slate-200 bg-white">
       <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
         <div>
           <h3 className="text-sm font-semibold text-slate-900">Priority Board</h3>
-          <p className="mt-1 text-xs text-slate-500">Start with cases most likely to lose money or miss proof.</p>
+          <p className="mt-1 text-xs font-medium text-slate-600">Start with cases most likely to lose money or miss proof.</p>
         </div>
-        <button
-          onClick={onOpenQueue}
-          className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-2 text-xs font-medium text-white hover:bg-slate-800"
-        >
-          Open queue <ArrowRight className="h-3.5 w-3.5" />
-        </button>
+        <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">{urgent.length} active</span>
       </div>
-      <div className="divide-y divide-slate-100">
+      <div className="flex-1 divide-y divide-slate-100">
+        {!urgent.length && (
+          <div className="flex h-full min-h-[280px] items-center justify-center px-4 py-12 text-center">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900">No active dispute risk</h3>
+              <p className="mt-1 text-xs font-medium text-slate-600">New Razorpay disputes and manually created cases will appear here.</p>
+            </div>
+          </div>
+        )}
         {urgent.map((caseItem) => {
           const action = actionTone(caseItem.recommended_action);
           return (
@@ -236,7 +268,7 @@ function PriorityBoard({ cases, onSelectCase, onOpenQueue }) {
                 onSelectCase(caseItem.id);
                 onOpenQueue();
               }}
-              className="grid w-full grid-cols-[minmax(0,1fr)_90px_90px_116px] items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50 max-md:grid-cols-1"
+              className="grid w-full grid-cols-[minmax(0,1.4fr)_minmax(160px,0.8fr)_108px_118px_128px] items-center gap-4 px-4 py-3.5 text-left transition-colors hover:bg-slate-50 max-lg:grid-cols-1"
             >
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
@@ -246,48 +278,32 @@ function PriorityBoard({ cases, onSelectCase, onOpenQueue }) {
                   </span>
                 </div>
                 <div className="mt-1 truncate font-mono text-xs text-slate-500">{caseItem.order_id}</div>
-            <div className="mt-1 text-xs font-medium text-slate-600">{priorityReason(caseItem)}</div>
+                <div className="mt-1 text-xs font-medium text-slate-600">{priorityReason(caseItem)}</div>
+              </div>
+              <div className="min-w-0 text-xs font-medium text-slate-600">
+                <div className="truncate">{caseItem.dispute_reason}</div>
+                <div className="mt-1 font-mono text-[11px] text-slate-500">{caseItem.payment_id}</div>
               </div>
               <div>
-                <div className="text-[11px] uppercase text-slate-400">Risk</div>
-                <div className="text-sm font-semibold text-red-600">{caseItem.risk_score}</div>
+                <div className="mb-1 text-xs font-medium text-slate-600">Risk</div>
+                <span className="inline-flex rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-700">
+                  {caseItem.risk_score}
+                </span>
               </div>
               <div>
-                <div className="text-[11px] uppercase text-slate-400">Ready</div>
-                <div className="text-sm font-semibold text-amber-600">{caseItem.readiness_score}%</div>
+                <div className="mb-1 text-xs font-medium text-slate-600">Readiness</div>
+                <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${readinessPill(Number(caseItem.readiness_score || 0))}`}>
+                  {caseItem.readiness_score}%
+                </span>
               </div>
-              <div className="justify-self-start rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700">
-                {action.label}
+              <div className="justify-self-start">
+                <span className={`inline-flex rounded-md border px-2.5 py-1.5 text-xs font-semibold ${action.color === "red" ? "border-red-200 bg-red-50 text-red-700" : action.color === "amber" ? "border-amber-200 bg-amber-50 text-amber-700" : "border-slate-200 bg-white text-slate-700"}`}>
+                  {action.label}
+                </span>
               </div>
             </button>
           );
         })}
-      </div>
-    </div>
-  );
-}
-
-function CompactSafetyPanel() {
-  const items = [
-    "Reviewer approval before any external action",
-    "Rule engine controls contest, accept, and escalate paths",
-    "Evidence-backed packet for every decision",
-    "Refund-safe drafts with full audit history",
-  ];
-
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <ShieldCheck className="h-4 w-4 text-emerald-600" />
-        <h3 className="text-sm font-semibold text-slate-900">Fintech Guardrails</h3>
-      </div>
-      <div className="space-y-2">
-        {items.map((item) => (
-          <div key={item} className="flex items-start gap-2 rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600">
-            <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
-            <span>{item}</span>
-          </div>
-        ))}
       </div>
     </div>
   );
@@ -321,12 +337,87 @@ function TrackFitPanel() {
     <section className="grid gap-3 xl:grid-cols-4">
       {items.map((item) => (
         <div key={item.label} className="rounded-lg border border-slate-200 bg-white p-4">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">{item.label}</div>
+          <div className="text-xs font-medium text-emerald-700">{item.label}</div>
           <div className="mt-2 text-sm font-semibold text-slate-950">{item.value}</div>
-          <p className="mt-1 text-xs leading-relaxed text-slate-500">{item.detail}</p>
+          <p className="mt-1 text-xs font-medium leading-relaxed text-slate-600">{item.detail}</p>
         </div>
       ))}
     </section>
+  );
+}
+
+function ProductInfoPanel() {
+  return (
+    <details className="group rounded-lg border border-slate-200 bg-white">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+        <div className="flex items-center gap-2">
+          <Info className="h-4 w-4 text-blue-600" />
+          <span className="text-sm font-semibold text-slate-900">Product context</span>
+          <span className="hidden text-xs font-medium text-slate-600 sm:inline">
+            How ProofPilot turns dispute signals into reviewer-approved packets.
+          </span>
+        </div>
+        <ChevronDown className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="border-t border-slate-200 p-4">
+        <p className="mb-4 max-w-4xl text-sm font-medium leading-relaxed text-slate-600">
+          ProofPilot shows which dispute can lose money, what proof is missing, and what action is safest. It turns Razorpay payment and dispute signals into reviewer-approved response packets before deadlines are missed.
+        </p>
+        <TrackFitPanel />
+      </div>
+    </details>
+  );
+}
+
+function MerchantWorkflowBanner() {
+  return (
+    <details className="group rounded-lg border border-slate-200 bg-white">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-900">Merchant workflow</h3>
+          <p className="mt-1 text-xs font-medium text-slate-600">Open only when you need the step-by-step flow.</p>
+        </div>
+        <ChevronDown className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="grid gap-4 border-t border-slate-200 p-4 md:grid-cols-5">
+        <WorkflowStep index={1} icon={Radar} title="See risky case" text="Payment, refund, dispute, and complaint signals are grouped." />
+        <WorkflowStep index={2} icon={ShieldCheck} title="Know the risk" text="Model scores chance of merchant loss and explains why." />
+        <WorkflowStep index={3} icon={FileCheck2} title="Fix missing proof" text="Required invoice, refund, delivery, or policy proof is checked." />
+        <WorkflowStep index={4} icon={Sparkles} title="Review response" text="A concise response draft is prepared from the proof." />
+        <WorkflowStep index={5} icon={UserCheck} title="Take decision" text="Reviewer approves, escalates, accepts, exports, and audits." isLast />
+      </div>
+    </details>
+  );
+}
+
+function GuardrailsFooter() {
+  const items = [
+    "Reviewer approval before any external action",
+    "Rules control contest, accept, and escalate paths",
+    "Evidence-backed packet for every decision",
+    "Full audit history for proof, drafts, and decisions",
+  ];
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4 text-emerald-600" />
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900">Operational controls</h3>
+            <p className="mt-0.5 text-xs font-medium text-slate-600">Decision safety is enforced outside the AI layer.</p>
+          </div>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {items.map((item) => (
+            <div key={item} className="flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700">
+              <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+              <span>{item}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -362,7 +453,7 @@ function DataStatusStrip({ dataSource, loading, error, lastSynced, razorpayStatu
             const Icon = source.icon;
             return (
               <div key={source.label} className="rounded-md border border-slate-100 bg-slate-50 px-2.5 py-2">
-                <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                <div className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
                   <Icon className={`h-3.5 w-3.5 ${source.ok ? "text-emerald-600" : "text-amber-600"}`} />
                   {source.label}
                 </div>
@@ -379,7 +470,7 @@ function DataStatusStrip({ dataSource, loading, error, lastSynced, razorpayStatu
 function OverviewHome({ cases, metrics, onSelectCase, onNavigate, dataSource, loading, error, lastSynced, razorpayStatus }) {
 
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-full flex-col gap-4">
       <DataStatusStrip
         dataSource={dataSource}
         loading={loading}
@@ -389,62 +480,30 @@ function OverviewHome({ cases, metrics, onSelectCase, onNavigate, dataSource, lo
       />
 
       <section className="rounded-lg border border-slate-200 bg-white p-5">
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_440px] xl:items-center">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="min-w-0">
             <div className="inline-flex items-center gap-2 rounded-md border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
               <ShieldCheck className="h-3.5 w-3.5" /> AI Risk Manager | Dispute Loss Prevention
             </div>
             <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950 md:text-3xl">ProofPilot AI</h2>
-            <div className="mt-1 text-sm font-medium text-slate-700">A simple action queue for risky payments, disputes, missing proof, and final merchant decisions.</div>
-            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600 md:text-base">
-              ProofPilot shows which dispute can lose money, what proof is missing, and what action is safest. It turns Razorpay payment and dispute signals into reviewer-approved response packets before deadlines are missed.
-            </p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button onClick={() => onNavigate("risk-queue")} className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-2 text-xs font-medium text-white hover:bg-slate-800">
-                Open action queue <ArrowRight className="h-3.5 w-3.5" />
-              </button>
-              <button onClick={() => onNavigate("metrics")} className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">
-                View model impact
-              </button>
-            </div>
+            <div className="mt-1 text-base font-medium text-slate-700">Actionable risk management and dispute recovery queue.</div>
           </div>
-          <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
-            <ImpactCard icon={IndianRupee} label="Ready To Recover" value={formatMoney(metrics.recoverableValue)} hint={`${metrics.contestReadyCases} contest-ready packets`} tone="emerald" />
-            <ImpactCard icon={TrendingUp} label="Net Merchant Benefit" value={formatMoney(metrics.netBenefit)} hint="recoverable value minus review cost" tone="blue" />
-            <ImpactCard icon={UserCheck} label="Human Queue" value={metrics.awaitingApprovalCases} hint="awaiting final decision" tone="slate" />
-          </div>
+          <button onClick={() => onNavigate("risk-queue")} className="inline-flex w-fit items-center gap-1.5 rounded-md bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800">
+            Open action queue <ArrowRight className="h-4 w-4" />
+          </button>
         </div>
       </section>
 
-      <TrackFitPanel />
+      <KpiBar metrics={metrics} />
 
-      <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <ImpactCard icon={Radar} label="Cases Needing Action" value={metrics.openCases} hint={`${metrics.highRiskCases} high risk | ${metrics.totalCases} total cases`} tone="amber" />
-        <ImpactCard icon={FileCheck2} label="Proof Ready" value={`${metrics.evidenceReadyCases}/${metrics.openCases}`} hint={`${metrics.actionReadyCases} response-ready packets`} tone="emerald" />
-        <ImpactCard icon={UserCheck} label="Waiting For Decision" value={metrics.awaitingApprovalCases} hint="reviewer approval required" tone="slate" />
-        <ImpactCard icon={IndianRupee} label="Money At Risk" value={formatMoney(metrics.valueAtRisk)} hint="open draft/escalated cases" tone="blue" />
-      </section>
+      <ProductInfoPanel />
 
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="rounded-lg border border-slate-200 bg-white p-4">
-          <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h3 className="text-sm font-semibold text-slate-900">How A Merchant Uses It</h3>
-              <p className="text-xs text-slate-500">A clear path from risky dispute to approved response.</p>
-            </div>
-          </div>
-          <div className="grid gap-4 md:grid-cols-5">
-            <WorkflowStep index={1} icon={Radar} title="See risky case" text="Payment, refund, dispute, and complaint signals are grouped." />
-            <WorkflowStep index={2} icon={ShieldCheck} title="Know the risk" text="Model scores chance of merchant loss and explains why." />
-            <WorkflowStep index={3} icon={FileCheck2} title="Fix missing proof" text="Required invoice, refund, delivery, or policy proof is checked." />
-            <WorkflowStep index={4} icon={Sparkles} title="Review response" text="A concise response draft is prepared from the proof." />
-            <WorkflowStep index={5} icon={UserCheck} title="Take decision" text="Reviewer approves, escalates, accepts, exports, and audits." isLast />
-          </div>
-        </div>
-        <CompactSafetyPanel />
-      </section>
+      <div className="flex flex-1 flex-col">
+        <PriorityBoard cases={cases} onSelectCase={onSelectCase} onOpenQueue={() => onNavigate("risk-queue", true)} />
+      </div>
 
-      <PriorityBoard cases={cases} onSelectCase={onSelectCase} onOpenQueue={() => onNavigate("risk-queue", true)} />
+      <MerchantWorkflowBanner />
+      <GuardrailsFooter />
     </div>
   );
 }
