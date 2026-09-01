@@ -1,7 +1,19 @@
-﻿import React from "react";
+﻿import React, { useMemo, useState } from "react";
 import { PlusCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { riskTone, readinessTone, actionTone } from "@/lib/ruleEngine";
+
+const ACTIVE_STATUSES = new Set(["draft", "escalated"]);
+const DECIDED_STATUSES = new Set(["approved", "accepted"]);
+const CLOSED_STATUSES = new Set(["contested", "closed"]);
+
+const QUEUE_TABS = [
+  { id: "open", label: "Open" },
+  { id: "proof-ready", label: "Proof Ready" },
+  { id: "escalated", label: "Escalated" },
+  { id: "decided", label: "Decided" },
+  { id: "closed", label: "Closed" },
+];
 
 const toneClasses = {
   red: "bg-red-100 text-red-700",
@@ -27,13 +39,39 @@ function formatMoney(value) {
   return `INR ${Number(value || 0).toLocaleString("en-IN")}`;
 }
 
+function matchesTab(caseItem, tab) {
+  const status = caseItem.packet_status || "draft";
+  if (tab === "proof-ready") return status === "draft" && Number(caseItem.readiness_score || 0) >= 80;
+  if (tab === "escalated") return status === "escalated";
+  if (tab === "decided") return DECIDED_STATUSES.has(status);
+  if (tab === "closed") return CLOSED_STATUSES.has(status);
+  return ACTIVE_STATUSES.has(status);
+}
+
+function emptyCopy(tab) {
+  if (tab === "proof-ready") return "No proof-ready cases yet";
+  if (tab === "escalated") return "No escalated cases";
+  if (tab === "decided") return "No decided cases";
+  if (tab === "closed") return "No closed cases";
+  return "No dispute cases need action";
+}
+
 export default function RiskQueue({ cases, selectedId, onSelect, onCreateCase }) {
+  const [tab, setTab] = useState("open");
+  const counts = useMemo(() => {
+    return QUEUE_TABS.reduce((acc, item) => {
+      acc[item.id] = cases.filter((caseItem) => matchesTab(caseItem, item.id)).length;
+      return acc;
+    }, {});
+  }, [cases]);
+  const visibleCases = useMemo(() => cases.filter((caseItem) => matchesTab(caseItem, tab)), [cases, tab]);
+
   return (
     <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
       <div className="px-4 py-3 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div>
           <h2 className="text-sm font-semibold text-slate-900">Action Queue</h2>
-          <p className="text-xs text-slate-500">{cases.length} dispute cases ranked by merchant loss risk, missing proof, and deadline.</p>
+          <p className="text-xs text-slate-500">{counts.open} open dispute cases ranked by merchant loss risk, missing proof, and deadline.</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="hidden text-xs text-slate-500 sm:block">Open a case to see what happened, what is missing, and what to do next.</div>
@@ -42,6 +80,24 @@ export default function RiskQueue({ cases, selectedId, onSelect, onCreateCase })
             New case
           </button>
         </div>
+      </div>
+      <div className="flex gap-1 overflow-x-auto border-b border-slate-200 bg-white px-3 py-2">
+        {QUEUE_TABS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => setTab(item.id)}
+            className={cn(
+              "inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
+              tab === item.id ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"
+            )}
+          >
+            {item.label}
+            <span className={cn("rounded px-1.5 py-0.5 text-[10px]", tab === item.id ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500")}>
+              {counts[item.id] || 0}
+            </span>
+          </button>
+        ))}
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[1040px] text-sm">
@@ -60,11 +116,11 @@ export default function RiskQueue({ cases, selectedId, onSelect, onCreateCase })
             </tr>
           </thead>
           <tbody>
-            {!cases.length && (
+            {!visibleCases.length && (
               <tr>
                 <td colSpan={10} className="px-4 py-10 text-center">
                   <div className="mx-auto max-w-sm">
-                    <div className="text-sm font-semibold text-slate-900">No dispute cases need action</div>
+                    <div className="text-sm font-semibold text-slate-900">{emptyCopy(tab)}</div>
                     <p className="mt-1 text-xs text-slate-500">Create a case to score risk, check proof, and prepare a reviewer-approved response.</p>
                     <button onClick={onCreateCase} className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700">
                       <PlusCircle className="h-3.5 w-3.5" />
@@ -74,7 +130,7 @@ export default function RiskQueue({ cases, selectedId, onSelect, onCreateCase })
                 </td>
               </tr>
             )}
-            {cases.map((c) => {
+            {visibleCases.map((c) => {
               const risk = riskTone(c.risk_score);
               const ready = readinessTone(c.readiness_score);
               const act = actionTone(c.recommended_action);

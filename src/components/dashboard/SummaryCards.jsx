@@ -29,10 +29,10 @@ export default function SummaryCards({ cases, metrics: backendMetrics }) {
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-      <Card icon={ShieldAlert} label="Total Cases" value={metrics.totalCases} sub={`${metrics.openCases} open | ${metrics.highRiskCases} high risk`} tone="red" />
-      <Card icon={CheckCircle2} label="Evidence Ready" value={metrics.evidenceReadyCases} sub={`${metrics.totalCases - metrics.evidenceReadyCases} need attention`} tone="emerald" />
+      <Card icon={ShieldAlert} label="Open Cases" value={metrics.openCases} sub={`${metrics.totalCases} total | ${metrics.highRiskCases} high risk`} tone="red" />
+      <Card icon={CheckCircle2} label="Evidence Ready" value={metrics.evidenceReadyCases} sub={`${metrics.openCases - metrics.evidenceReadyCases} open cases need proof`} tone="emerald" />
       <Card icon={Clock} label="Awaiting Approval" value={metrics.awaitingApprovalCases} sub="human review required" tone="amber" />
-      <Card icon={IndianRupee} label="Value at Risk" value={formatMoney(metrics.valueAtRisk)} sub="draft + escalated packets" tone="blue" />
+      <Card icon={IndianRupee} label="Value at Risk" value={formatMoney(metrics.valueAtRisk)} sub="open draft/escalated cases" tone="blue" />
     </div>
   );
 }

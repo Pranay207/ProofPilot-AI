@@ -121,6 +121,18 @@ describe("ProofPilot production guardrails", () => {
     assert.equal(body.failure_state, "NEEDS_MANUAL_REVIEW");
   });
 
+  it("records reviewer reason for human decisions", async () => {
+    const reason = "Delivery proof is incomplete, senior review required.";
+    const decided = await json("/api/cases/PP-2026-0002/decision", {
+      method: "PATCH",
+      body: JSON.stringify({ status: "escalated", reason }),
+    });
+
+    assert.equal(decided.response.status, 200);
+    assert.equal(decided.body.packet_status, "escalated");
+    assert.ok(decided.body.audit_log.some((event) => event.action === "escalated" && event.detail.includes(reason)));
+  });
+
   it("stores and downloads attached evidence through the backend", async () => {
     const content = "integration evidence proof";
     const payload = {

@@ -1,5 +1,6 @@
 export const REVIEW_COST_PER_CASE = 55;
 export const TIME_SAVED_MIN_PER_CASE = 24;
+export const OPEN_CASE_STATUSES = new Set(["draft", "escalated"]);
 
 export function formatMoney(value) {
   return `INR ${Number(value || 0).toLocaleString("en-IN")}`;
@@ -7,15 +8,15 @@ export function formatMoney(value) {
 
 export function calculateProofPilotMetrics(cases = []) {
   const totalCases = cases.length;
-  const highRiskCases = cases.filter((item) => item.risk_score >= 75).length;
-  const evidenceReadyCases = cases.filter((item) => item.readiness_score >= 80).length;
+  const openCases = cases.filter((item) => OPEN_CASE_STATUSES.has(item.packet_status || "draft"));
+  const highRiskCases = openCases.filter((item) => item.risk_score >= 75).length;
+  const evidenceReadyCases = openCases.filter((item) => item.readiness_score >= 80).length;
   const awaitingApprovalCases = cases.filter((item) => item.packet_status === "draft").length;
   const escalatedCases = cases.filter((item) => item.packet_status === "escalated").length;
   const acceptedCases = cases.filter((item) => item.packet_status === "accepted").length;
   const approvedContestCases = cases.filter((item) => item.packet_status === "approved" && item.recommended_action === "contest");
   const contestReadyCases = cases.filter((item) => item.packet_status === "draft" && item.recommended_action === "contest" && item.readiness_score >= 80);
-  const actionReadyCases = cases.filter((item) => item.recommended_action === "contest" && item.readiness_score >= 80);
-  const openCases = cases.filter((item) => ["draft", "escalated"].includes(item.packet_status || "draft"));
+  const actionReadyCases = openCases.filter((item) => item.recommended_action === "contest" && item.readiness_score >= 80);
 
   const totalValue = cases.reduce((sum, item) => sum + Number(item.amount || 0), 0);
   const valueAtRisk = openCases.reduce((sum, item) => sum + Number(item.amount || 0), 0);

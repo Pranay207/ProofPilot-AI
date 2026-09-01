@@ -31,10 +31,14 @@ const OUTCOME_COPY = {
 export default function HumanApproval({ caseItem, onApprove, onEscalate, onAccept, onSubmit, onEditDraft }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(caseItem?.merchant_response_draft || "");
+  const [decisionReason, setDecisionReason] = useState("");
+  const [reasonError, setReasonError] = useState("");
 
   useEffect(() => {
     setDraft(caseItem?.merchant_response_draft || "");
     setEditing(false);
+    setDecisionReason("");
+    setReasonError("");
   }, [caseItem?.id, caseItem?.merchant_response_draft]);
 
   if (!caseItem) return null;
@@ -44,6 +48,16 @@ export default function HumanApproval({ caseItem, onApprove, onEscalate, onAccep
   const saveEdit = () => {
     onEditDraft(draft);
     setEditing(false);
+  };
+
+  const submitDecision = (handler) => {
+    const reason = decisionReason.trim();
+    if (!reason) {
+      setReasonError("Add a short reason before recording a final decision.");
+      return;
+    }
+    setReasonError("");
+    handler(reason);
   };
 
   return (
@@ -91,9 +105,24 @@ export default function HumanApproval({ caseItem, onApprove, onEscalate, onAccep
 
       <div className="bg-white rounded-lg border border-slate-200 p-4">
         <h3 className="text-sm font-semibold text-slate-900 mb-3">Decision</h3>
+        <label className="mb-3 block">
+          <span className="text-xs font-medium text-slate-600">Reviewer reason</span>
+          <textarea
+            value={decisionReason}
+            onChange={(event) => {
+              setDecisionReason(event.target.value);
+              if (reasonError) setReasonError("");
+            }}
+            disabled={status !== "draft"}
+            rows={3}
+            placeholder="Example: Delivery proof is missing, so this needs senior review."
+            className="mt-1 w-full rounded-md border border-slate-200 p-3 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50 disabled:text-slate-400"
+          />
+          {reasonError && <span className="mt-1 block text-xs font-medium text-red-600">{reasonError}</span>}
+        </label>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
           <button
-            onClick={onApprove}
+            onClick={() => submitDecision(onApprove)}
             disabled={status !== "draft"}
             className="inline-flex flex-col items-center gap-1 px-3 py-3 rounded-md border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
@@ -101,7 +130,7 @@ export default function HumanApproval({ caseItem, onApprove, onEscalate, onAccep
             <span className="text-xs font-medium">Approve packet</span>
           </button>
           <button
-            onClick={onEscalate}
+            onClick={() => submitDecision(onEscalate)}
             disabled={status !== "draft"}
             className="inline-flex flex-col items-center gap-1 px-3 py-3 rounded-md border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
@@ -109,7 +138,7 @@ export default function HumanApproval({ caseItem, onApprove, onEscalate, onAccep
             <span className="text-xs font-medium">Escalate to human</span>
           </button>
           <button
-            onClick={onAccept}
+            onClick={() => submitDecision(onAccept)}
             disabled={status !== "draft"}
             className="inline-flex flex-col items-center gap-1 px-3 py-3 rounded-md border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >

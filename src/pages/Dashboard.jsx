@@ -419,8 +419,8 @@ function OverviewHome({ cases, metrics, onSelectCase, onNavigate, dataSource, lo
       <TrackFitPanel />
 
       <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <ImpactCard icon={Radar} label="Cases Needing Action" value={metrics.totalCases} hint={`${metrics.highRiskCases} high risk | avg risk ${metrics.averageRisk}`} tone="amber" />
-        <ImpactCard icon={FileCheck2} label="Proof Ready" value={`${metrics.evidenceReadyCases}/${metrics.totalCases}`} hint={`${metrics.actionReadyCases} response-ready packets`} tone="emerald" />
+        <ImpactCard icon={Radar} label="Cases Needing Action" value={metrics.openCases} hint={`${metrics.highRiskCases} high risk | ${metrics.totalCases} total cases`} tone="amber" />
+        <ImpactCard icon={FileCheck2} label="Proof Ready" value={`${metrics.evidenceReadyCases}/${metrics.openCases}`} hint={`${metrics.actionReadyCases} response-ready packets`} tone="emerald" />
         <ImpactCard icon={UserCheck} label="Waiting For Decision" value={metrics.awaitingApprovalCases} hint="reviewer approval required" tone="slate" />
         <ImpactCard icon={IndianRupee} label="Money At Risk" value={formatMoney(metrics.valueAtRisk)} hint="open draft/escalated cases" tone="blue" />
       </section>
@@ -882,15 +882,16 @@ export default function Dashboard() {
     ];
   };
 
-  const handleDecision = async (status, actionLabel) => {
+  const handleDecision = async (status, actionLabel, reason = "") => {
     if (!selected) return;
-    const auditLog = addAudit(actionLabel, `Packet ${status} for ${selected.order_id}`);
+    const detail = reason.trim() ? `Packet ${status} for ${selected.order_id}: ${reason.trim()}` : `Packet ${status} for ${selected.order_id}`;
+    const auditLog = addAudit(actionLabel, detail);
     updateCase(selected.id, { packet_status: status, audit_log: auditLog });
     try {
       const res = await apiFetch(`/api/cases/${selected.id}/decision`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, reason }),
       });
       if (res.ok) {
         const nextCase = await res.json();
@@ -1016,9 +1017,9 @@ export default function Dashboard() {
       onRemoveEvidence={handleRemoveEvidence}
       recentlyAttached={recentlyAttached}
       attachments={{ ...(selected.evidence_files || {}), ...(attachments[selected.id] || {}) }}
-      onApprove={() => handleDecision("approved", "approved")}
-      onEscalate={() => handleDecision("escalated", "escalated")}
-      onAccept={() => handleDecision("accepted", "accepted")}
+      onApprove={(reason) => handleDecision("approved", "approved", reason)}
+      onEscalate={(reason) => handleDecision("escalated", "escalated", reason)}
+      onAccept={(reason) => handleDecision("accepted", "accepted", reason)}
       onSubmit={handleSubmitToRazorpay}
       onEditDraft={handleEditDraft}
       onExportPacket={handleExportPacket}

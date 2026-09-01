@@ -1302,14 +1302,16 @@ app.patch("/api/cases/:id/decision", async (req, res, next) => {
   try {
     const { status } = req.body;
     validateDecisionStatus(status);
+    const reason = cleanText(String(req.body?.reason || "").trim()).slice(0, 1000);
     const db = await getPrisma();
     if (!db) {
       const current = localCases.find((caseItem) => caseItem.id === req.params.id || caseItem.case_id === req.params.id);
       if (!current) return res.status(404).json({ error: "Case not found" });
       ensureContestHasEvidence(current, status);
+      if (!reason) return res.status(400).json({ error: "Reviewer reason is required before recording a final decision" });
       localCases = localCases.map((caseItem) => {
         if (caseItem.id !== req.params.id && caseItem.case_id !== req.params.id) return caseItem;
-        return addAudit({ ...caseItem, packet_status: status }, "Human Reviewer", status, `Packet ${status}`);
+        return addAudit({ ...caseItem, packet_status: status }, "Human Reviewer", status, `Packet ${status}: ${reason}`);
       });
       return res.json(localCases.find((item) => item.id === req.params.id || item.case_id === req.params.id));
     }
@@ -1317,8 +1319,9 @@ app.patch("/api/cases/:id/decision", async (req, res, next) => {
     const caseRow = await getCaseByParam(db, req.params.id, req.merchant.id);
     if (!caseRow) return res.status(404).json({ error: "Case not found" });
     ensureContestHasEvidence(toFrontendCase(caseRow), status);
+    if (!reason) return res.status(400).json({ error: "Reviewer reason is required before recording a final decision" });
     await db.case.update({ where: { id: caseRow.id }, data: { packetStatus: status } });
-    await db.auditLog.create({ data: { caseId: caseRow.id, actor: "Human Reviewer", action: status, detail: `Packet ${status}` } });
+    await db.auditLog.create({ data: { caseId: caseRow.id, actor: "Human Reviewer", action: status, detail: `Packet ${status}: ${reason}` } });
     const finalRow = await getCaseByParam(db, req.params.id, req.merchant.id);
     res.json(toFrontendCase(finalRow));
   } catch (error) {

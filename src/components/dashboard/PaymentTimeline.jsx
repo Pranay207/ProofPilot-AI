@@ -1,11 +1,14 @@
 import React from "react";
-import { CheckCircle2, AlertTriangle, AlertCircle } from "lucide-react";
+import { CheckCircle2, AlertTriangle, AlertCircle, ClipboardCheck, FileText, UserCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const STATUS = {
   ok: { icon: CheckCircle2, color: "text-emerald-500", dot: "bg-emerald-500" },
   warn: { icon: AlertTriangle, color: "text-amber-500", dot: "bg-amber-500" },
   alert: { icon: AlertCircle, color: "text-red-500", dot: "bg-red-500" },
+  audit: { icon: UserCheck, color: "text-blue-500", dot: "bg-blue-500" },
+  evidence: { icon: ClipboardCheck, color: "text-emerald-500", dot: "bg-emerald-500" },
+  draft: { icon: FileText, color: "text-slate-500", dot: "bg-slate-500" },
 };
 
 function formatDate(iso) {
@@ -19,11 +22,32 @@ function formatDate(iso) {
 
 export default function PaymentTimeline({ caseItem }) {
   if (!caseItem) return null;
-  const events = caseItem.timeline_events || [];
+  const timelineEvents = (caseItem.timeline_events || []).map((event) => ({
+    event: event.event,
+    timestamp: event.timestamp,
+    status: event.status || "ok",
+    detail: event.detail,
+  }));
+  const auditEvents = (caseItem.audit_log || []).map((event) => ({
+    event: event.action?.replace(/_/g, " ") || "Audit event",
+    timestamp: event.timestamp,
+    status: event.action === "evidence_attached" ? "evidence" : event.action === "edited" ? "draft" : "audit",
+    detail: `${event.actor}: ${event.detail}`,
+  }));
+  const events = [...timelineEvents, ...auditEvents]
+    .filter((event) => event.timestamp)
+    .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
   return (
     <div className="bg-white rounded-lg border border-slate-200 p-4">
-      <h3 className="text-sm font-semibold text-slate-900 mb-4">What Happened</h3>
+      <div className="mb-4">
+        <h3 className="text-sm font-semibold text-slate-900">Case Timeline</h3>
+        <p className="mt-1 text-xs text-slate-500">Payment signals, proof changes, draft edits, and reviewer decisions in order.</p>
+      </div>
       <ol className="relative border-l border-slate-200 ml-3 space-y-4">
+        {!events.length && (
+          <li className="ml-5 text-sm text-slate-500">No timeline events recorded yet.</li>
+        )}
         {events.map((ev, i) => {
           const s = STATUS[ev.status] || STATUS.ok;
           const Icon = s.icon;
