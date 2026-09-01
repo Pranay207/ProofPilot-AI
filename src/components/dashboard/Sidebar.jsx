@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 const NAV = [
   { id: "overview", label: "Overview", icon: ShieldCheck },
   { id: "risk-queue", label: "Action Queue", icon: ListChecks },
-  { id: "metrics", label: "Model & Impact", icon: BarChart3 },
+  { id: "metrics", label: "Risk Intelligence", icon: BarChart3 },
   { id: "reliability", label: "System Health", icon: RefreshCw },
   { id: "audit-log", label: "Audit Trail", icon: ScrollText },
 ];

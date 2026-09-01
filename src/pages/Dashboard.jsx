@@ -39,7 +39,7 @@ const CASE_SECTIONS = ["evidence-passport", "timeline", "missing-proof", "disput
 const PAGE_TITLES = {
   overview: "Overview",
   "risk-queue": "Action Queue",
-  metrics: "Model & Impact",
+  metrics: "Risk Intelligence",
   reliability: "System Health",
   "audit-log": "Audit Trail",
 };
@@ -329,7 +329,7 @@ function TrackFitPanel() {
     {
       label: "Measured bar",
       value: "Precision, recall, false-positive cost",
-      detail: "Model card and ROI metrics are visible in Model & Impact.",
+      detail: "Model card and ROI metrics are visible in Risk Intelligence.",
     },
   ];
 
