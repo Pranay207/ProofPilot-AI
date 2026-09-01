@@ -1,74 +1,76 @@
 # ProofPilot AI
 
-ProofPilot AI is a Razorpay Buildathon **AI Risk Manager** project.
+ProofPilot AI is a merchant dispute risk workspace for Razorpay-powered businesses.
 
-It focuses on one class of merchant loss: **chargeback and dispute loss caused by missing, late, or scattered evidence**.
+It helps merchants detect high-risk dispute cases, collect required proof, prepare response packets, and require human approval before any external dispute action.
 
-## Problem
+## Why This Matters
 
-Merchants often lose disputes even when they have a valid case because payment records, refund status, delivery proof, customer communication, and policy evidence are spread across different systems. By the time a chargeback deadline arrives, the response packet is incomplete or unsafe to submit.
+Merchants often lose disputes even when they have a valid case because evidence is late, incomplete, or scattered across payment records, refund status, delivery proof, customer communication, and policy documents.
 
-## Solution
-
-ProofPilot turns a risky dispute into an evidence-ready, human-approved response packet.
+ProofPilot focuses on one measurable loss class:
 
 ```text
-Signed Razorpay webhook
+Preventable merchant dispute loss caused by missing or late evidence.
+```
+
+The product is designed for operators who need to answer three questions quickly:
+
+- Which cases can lose money?
+- What proof is missing?
+- What action is safe to take before the deadline?
+
+## Product Workflow
+
+```text
+Razorpay dispute webhook
+  -> signature verification
   -> idempotent event store
   -> payment signal store
   -> dispute case creation
-  -> ML loss-risk detector
-  -> deterministic evidence checklist
-  -> missing proof detection
+  -> ML loss-risk scoring
+  -> deterministic proof checklist
+  -> missing evidence detection
   -> AI-assisted response draft
-  -> rule-based recommendation
-  -> human final decision
-  -> export + audit trail
+  -> human reviewer decision
+  -> export, submit, or close with audit trail
 ```
 
-## Track Fit
+## Core Product Features
 
-- Track: AI Risk Manager
-- Direction: Chargeback evidence responder
-- Working system: detector + verifier + human-approved responder
-- Measured bar: precision, recall, F1, false-positive review cost
-- Safety: defense-only; ProofPilot never auto-submits disputes or refunds
-
-## Model
-
-The prototype uses a trained logistic regression model to estimate merchant-loss probability from:
-
-- dispute type
-- payment amount
-- missing evidence ratio
-- critical missing proof ratio
-- deadline urgency
-- payment/refund/delivery status mismatch
-- complaint signal
-- evidence readiness
-
-The app displays the model card in the Metrics Dashboard. In production, the same pipeline can be replaced with LightGBM/XGBoost trained on historical Razorpay dispute outcomes.
+- **Action Queue:** ranks open cases by merchant loss risk, proof gaps, and deadline urgency.
+- **Queue Tabs:** separates `Open`, `Proof Ready`, `Escalated`, `Decided`, and `Closed` cases.
+- **Evidence Passport:** required proof checklist per dispute type with upload, preview, replace, delete, timestamp, and storage status.
+- **Case Timeline:** combines payment/dispute events, evidence changes, draft edits, and reviewer decisions.
+- **AI Drafting:** classifies complaint intent, extracts useful signals, and drafts reviewer-facing response text.
+- **Human Approval:** final approve, escalate, or accept decisions require a reviewer reason and are written to the audit log.
+- **Backend Metrics:** money at risk, proof readiness, waiting decisions, recoverable value, and net merchant benefit are calculated server-side.
+- **System Health:** verifies webhook safety, duplicate handling, evidence storage, AI fallback, approval controls, and external action safety.
 
 ## AI Boundary
 
-ProofPilot uses AI only where judgment over unstructured information helps:
+ProofPilot uses AI only where judgment over unstructured text helps:
 
 - classify complaint intent
-- extract missing proof cues
-- summarize payment/refund/delivery context
-- draft reviewer-facing response text
+- extract dates, names, refund mentions, and delivery claims
+- detect missing evidence cues from notes
+- summarize case context
+- draft response text for a reviewer
+- explain why a case is risky
 
 ProofPilot does **not** let AI control:
 
 - final refund decisions
-- exact money calculations
-- webhook verification
-- dispute submission
-- case state transitions
+- financial amount calculation
+- ledger mutation
+- webhook validation
+- strict case state transitions
+- contest/accept decisions without rules and human approval
+- automatic dispute submission
 
-Rules calculate readiness and recommendations. A human reviewer approves, escalates, or accepts every case before external action.
+The architecture is intentionally hybrid: AI assists the reviewer, deterministic services enforce the workflow, and humans approve final actions.
 
-## Case Lifecycle
+## Deterministic Case Lifecycle
 
 ```text
 NEW_SIGNAL
@@ -76,41 +78,83 @@ NEW_SIGNAL
   -> PROOF_READY
   -> DRAFT_READY
   -> AWAITING_APPROVAL
-  -> APPROVED_TO_CONTEST / ACCEPTED_LOSS / ESCALATED
+  -> APPROVED_TO_CONTEST
+  -> CONTESTED / ACCEPTED_LOSS / ESCALATED
   -> CLOSED
 ```
 
-Each case exposes a `workflow` snapshot with current state, next safe action, and whether external action is allowed.
+Every case exposes a workflow snapshot with current state, next safe action, valid transitions, and whether external action is allowed.
+
+## Metrics
+
+ProofPilot calculates operational metrics on the backend, not in the UI.
+
+- **Money At Risk:** sum of open `draft` and `escalated` case amounts.
+- **Proof Ready:** open cases with required evidence readiness at or above threshold.
+- **Waiting For Decision:** draft cases requiring reviewer action.
+- **Ready To Recover:** contest-ready value backed by required proof.
+- **Net Merchant Benefit:** recoverable value minus review cost.
+- **False-positive Review Cost:** model review cost from evaluation confusion matrix.
+
+Accepted, contested, and closed cases remain in history and audit logs, but are removed from active money-at-risk and action-queue counts.
 
 ## Failure Recovery
 
-- Invalid webhook signature: reject and do not create a case.
-- Duplicate webhook: return success safely and avoid duplicate case creation.
-- Incomplete dispute payload: return validation error; do not partially write a case.
-- AI timeout: use deterministic score and fallback draft; route to human review.
-- AI invalid JSON: discard malformed output and use a schema-safe fallback response.
-- Database write failure: return API error; never mark external action completed.
+ProofPilot is designed to fail safely:
 
-## Evaluator Endpoint
+- Invalid webhook signatures are rejected and no case is created.
+- Duplicate webhooks are acknowledged without creating duplicate cases.
+- Incomplete dispute payloads fail validation before partial case writes.
+- AI timeout falls back to deterministic scoring and reviewer-controlled drafting.
+- Malformed AI JSON is discarded and replaced with schema-safe fallback output.
+- Missing required proof blocks contest approval.
+- External Razorpay actions require an approved packet and reviewer audit trail.
+
+## Razorpay Integration
+
+The primary case intake path is webhook-driven:
+
+```text
+payment.dispute.created -> ProofPilot case appears in dashboard
+```
+
+The app does not poll Razorpay every second. Razorpay sends a signed webhook when a dispute is created. Manual dispute sync is available as a recovery/backfill path when webhook delivery is missed or historical disputes need to be imported.
+
+Expected Razorpay setup:
+
+- Store Razorpay API keys only in server environment variables.
+- Add the webhook endpoint in the Razorpay Dashboard.
+- Enable the `payment.dispute.created` event for dispute intake.
+- Configure the same webhook secret in Razorpay and ProofPilot.
+
+## Evidence Storage
+
+ProofPilot supports local evidence storage for development and S3-compatible storage for production.
+
+Evidence files are linked to cases with:
+
+- evidence key
+- file name
+- MIME type
+- file size
+- uploaded timestamp
+- storage provider
+- storage key
+- download URL
+
+## Evaluation Endpoints
 
 ```text
 GET /api/evaluation
 ```
 
-Returns the judge-facing proof:
-
-- problem and track fit
-- architecture flow
-- AI boundary
-- model precision, recall, F1, accuracy, and false-positive review cost
-- live merchant impact metrics
-- failure recovery behavior
+Returns architecture, AI boundary, model metrics, live impact metrics, and failure recovery proof.
 
 ```text
 GET /api/reliability
 ```
 
-Returns operational guardrail checks for webhook signature gating, duplicate webhook handling, AI fallback, missing-evidence approval blocking, evidence storage mode, human approval, and external submission control. The dashboard exposes the same proof in the **Reliability** tab.
+Returns System Health checks for webhook verification, duplicate protection, AI fallback, proof blocking, evidence persistence, human approval, and external submission control.
 
 ## Verification
 
@@ -120,26 +164,22 @@ npm test
 npm run build
 ```
 
-The integration tests exercise invalid webhook signatures, duplicate Razorpay webhooks, missing-proof approval blocking, evidence upload/download, malformed AI output fallback, and AI timeout fallback.
+The integration tests cover:
 
-## Integrations
+- invalid Razorpay webhook signature
+- duplicate webhook idempotency
+- missing-proof approval blocking
+- reviewer decision reason in audit log
+- evidence upload, download, and delete
+- malformed AI output fallback
+- AI timeout fallback
+- system health checks
+- connector safety when external accounts are not configured
 
-- PostgreSQL case store for payment signals, webhook events, cases, evidence, timeline, and audit logs
-- Razorpay API keys for payment/dispute API access
-- Signature-protected Razorpay webhook receiver
-- Exportable dispute packet JSON
-
-## Production Configuration
-
-Production startup fails closed unless PostgreSQL, OIDC/JWT verification, S3 evidence storage, Razorpay credentials, and an explicit webhook merchant subject are configured. Run `npx prisma migrate deploy` before starting the API.
-
-The dashboard expects the hosting application to provide the verified OIDC access token as `window.__PROOFPILOT_AUTH_TOKEN__` (or `proofpilot_access_token` in local storage). Every case query is scoped to that token's merchant subject. A reviewer can approve a packet and submit it to Razorpay through the official contest API; attached files are uploaded to Razorpay's Documents API first.
-
-## Local Run
+## Local Development
 
 ```bash
 npm install
-npm run dev:api
 npm run dev
 ```
 
@@ -152,7 +192,37 @@ http://localhost:5173
 API:
 
 ```text
-http://localhost:4000
+http://localhost:10000
 ```
 
-Keep secrets only in `.env`. Do not commit Razorpay keys.
+## Production Configuration
+
+For a production deployment, configure:
+
+- PostgreSQL database
+- Razorpay API key and secret
+- Razorpay webhook secret
+- S3-compatible evidence storage
+- JWT/OIDC authentication
+- merchant subject mapping
+
+Run database migrations before starting the production API:
+
+```bash
+npx prisma migrate deploy
+```
+
+## Honest Production Notes
+
+The product workflow is implemented end to end for signed webhook intake, case creation, evidence handling, scoring, drafting, reviewer approval, metrics, and audit trail.
+
+The following require real external merchant accounts or data to prove in production:
+
+- historical Razorpay dispute outcomes for real ML training
+- courier, support, email, or WhatsApp credentials for automatic multi-source evidence collection
+- confirmed production S3 bucket permissions
+- live Razorpay dispute submission test with a real dispute ID
+
+## Positioning
+
+ProofPilot is not a generic AI wrapper. It is a controlled financial workflow where AI supports judgment, deterministic services enforce safety, and human reviewers control final merchant actions.
