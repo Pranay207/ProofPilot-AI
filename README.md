@@ -232,14 +232,9 @@ npm test
 
 ## 7. AI Boundary & Financial Safety Philosophy
 
-ProofPilot enforces strict separation between **AI advisory assistance** and **deterministic financial execution**:
-
-```
-## 7. Architecture Pattern: Propose–Verify–Approve (PVA)
-
 ProofPilot enforces strict separation between **AI advisory assistance** and **deterministic financial execution** via a Propose–Verify–Approve architecture:
 
-```text
+
 ✅ PROPOSE (AI Advisory Layer):
   • Parse unstructured customer claims and complaints.
   • Extract critical metadata (dates, order tokens, promised refund amounts).
