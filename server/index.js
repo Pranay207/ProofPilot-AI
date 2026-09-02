@@ -160,10 +160,16 @@ async function getWebhookMerchant() {
 async function attachMerchant(req) {
   const db = await getPrisma();
   if (!db) return null;
+  
+  // Prefer environment merchant name/email if configured (for webhook and API flows)
+  // Fall back to Auth0 claims otherwise
+  const merchantName = process.env.RAZORPAY_MERCHANT_NAME || req.auth.name || "Merchant";
+  const merchantEmail = process.env.RAZORPAY_MERCHANT_EMAIL || req.auth.email || null;
+  
   const merchant = await db.merchant.upsert({
     where: { authSubject: req.auth.subject },
-    update: { name: req.auth.name, email: req.auth.email },
-    create: { authSubject: req.auth.subject, name: req.auth.name, email: req.auth.email },
+    update: { name: merchantName, email: merchantEmail },
+    create: { authSubject: req.auth.subject, name: merchantName, email: merchantEmail },
   });
   req.merchant = merchant;
   return merchant;
