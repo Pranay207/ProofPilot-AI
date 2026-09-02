@@ -153,6 +153,10 @@ function isManualCase(caseItem) {
   return (caseItem.audit_log || []).some((log) => log.actor === "Merchant Ops" && log.action === "case_created");
 }
 
+function formatRazorpayAmount(caseItem) {
+  return `${Number(caseItem.amount || 0).toLocaleString("en-IN")} ${caseItem.currency || "INR"}`;
+}
+
 export default function CaseDetail({
   caseItem,
   activeTab,
@@ -200,10 +204,12 @@ export default function CaseDetail({
               <span className={cn("text-[11px] font-medium px-2 py-0.5 rounded uppercase", toneClasses[act.color])}>{act.label}</span>
             </div>
             <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
-              <span className="font-mono">{caseItem.case_id}</span>
-              <span className="font-mono">{caseItem.order_id}</span>
+              <span className="font-mono">dispute_id: {caseItem.dispute_id}</span>
+              <span className="font-mono">payment_id: {caseItem.payment_id}</span>
+              <span className="font-mono">amount: {formatRazorpayAmount(caseItem)}</span>
+              <span>status: {caseItem.status || "open"}</span>
+              <span>respond_by: {caseItem.respond_by || caseItem.deadline}</span>
               <span>| {caseItem.team} | {caseItem.owner}</span>
-              <span>| Deadline {caseItem.deadline}</span>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               <span className="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-600">

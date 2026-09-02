@@ -241,6 +241,8 @@ function PriorityBoard({ cases, onSelectCase, onOpenQueue }) {
     return "border-slate-200 bg-slate-100 text-slate-700";
   };
 
+  const formatRazorpayAmount = (caseItem) => `${Number(caseItem.amount || 0).toLocaleString("en-IN")} ${caseItem.currency || "INR"}`;
+
   return (
     <div className="flex min-h-[430px] flex-1 flex-col rounded-lg border border-slate-200 bg-white">
       <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
@@ -273,16 +275,18 @@ function PriorityBoard({ cases, onSelectCase, onOpenQueue }) {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium text-slate-900">{caseItem.customer_name}</span>
-                  <span className="rounded bg-slate-100 px-2 py-0.5 text-[11px] font-medium capitalize text-slate-600">
-                    {caseItem.dispute_type.replace(/_/g, " ")}
+                  <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-medium text-slate-700">
+                    {caseItem.reason_code || caseItem.dispute_type}
                   </span>
                 </div>
-                <div className="mt-1 truncate font-mono text-xs text-slate-500">{caseItem.order_id}</div>
+                <div className="mt-1 truncate font-mono text-xs text-slate-500">dispute_id: {caseItem.dispute_id}</div>
                 <div className="mt-1 text-xs font-medium text-slate-600">{priorityReason(caseItem)}</div>
               </div>
               <div className="min-w-0 text-xs font-medium text-slate-600">
-                <div className="truncate">{caseItem.dispute_reason}</div>
-                <div className="mt-1 font-mono text-[11px] text-slate-500">{caseItem.payment_id}</div>
+                <div className="truncate">{caseItem.reason_description || caseItem.dispute_reason}</div>
+                <div className="mt-1 font-mono text-[11px] text-slate-500">payment_id: {caseItem.payment_id}</div>
+                <div className="mt-1 text-[11px] font-semibold text-slate-700">amount: {formatRazorpayAmount(caseItem)}</div>
+                <div className="mt-1 text-[11px] text-slate-500">respond_by: {caseItem.respond_by || caseItem.deadline}</div>
               </div>
               <div>
                 <div className="mb-1 text-xs font-medium text-slate-600">Risk</div>
@@ -565,7 +569,7 @@ function NewCaseModal({ open, onClose, onSubmit }) {
       evidence_files: {},
       payment_id: form.payment_id || "pay_preview",
       order_id: form.order_id || "ord_preview",
-      dispute_id: form.dispute_id || "dsp_preview",
+      dispute_id: form.dispute_id || "disp_preview",
       timeline_events: [{ event: "payment.captured" }, { event: "proofpilot.case.created" }],
     };
     return scoreCase(preview);

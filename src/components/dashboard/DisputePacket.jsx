@@ -1,6 +1,8 @@
 import React from "react";
 import { Download, FileText, Sparkles, ShieldAlert } from "lucide-react";
 import { actionTone, EVIDENCE_LABELS } from "@/lib/ruleEngine";
+import { buildRazorpayEvidenceMapping } from "@/lib/razorpayEvidenceMapper";
+import RazorpayEvidenceMapper from "./RazorpayEvidenceMapper";
 
 const toneClasses = {
   emerald: "bg-emerald-50 text-emerald-700 border-emerald-200",
@@ -22,6 +24,7 @@ function labelEvidence(items = []) {
 }
 
 function exportPacket(caseItem, actionLabel) {
+  const evidenceMapping = buildRazorpayEvidenceMapping(caseItem);
   const packet = {
     generated_at: new Date().toISOString(),
     product: "ProofPilot AI",
@@ -33,6 +36,12 @@ function exportPacket(caseItem, actionLabel) {
       payment_id: caseItem.payment_id,
       dispute_id: caseItem.dispute_id,
       amount: caseItem.amount,
+      currency: caseItem.currency || "INR",
+      amount_deducted: caseItem.amount_deducted || 0,
+      reason_code: caseItem.reason_code || caseItem.dispute_type,
+      reason_description: caseItem.reason_description || caseItem.dispute_reason,
+      respond_by: caseItem.respond_by || caseItem.deadline,
+      status: caseItem.status || "open",
       deadline: caseItem.deadline,
     },
     scores: {
@@ -50,6 +59,12 @@ function exportPacket(caseItem, actionLabel) {
     evidence: {
       available: labelEvidence(caseItem.available_evidence),
       missing: labelEvidence(caseItem.missing_evidence),
+      razorpay_api_mapping: evidenceMapping.required_rows.map((row) => ({
+        evidence_key: row.evidence_key,
+        razorpay_parameter: row.razorpay_parameter,
+        attached: row.attached,
+        file_name: row.file?.file_name || null,
+      })),
     },
     response_draft: caseItem.merchant_response_draft,
     audit_guardrail: "AI generated draft only. Merchant human approval required before external submission.",
@@ -92,14 +107,22 @@ export default function DisputePacket({ caseItem, onExport }) {
           </div>
         </div>
 
-        <div className="grid sm:grid-cols-2 gap-3 mb-4">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
           <div className="rounded-md border border-slate-200 p-3">
-            <div className="text-[11px] uppercase text-slate-400">Dispute Type</div>
-            <div className="text-sm font-medium text-slate-800">{TYPE_LABEL[caseItem.dispute_type] || caseItem.dispute_type?.replace(/_/g, " ")}</div>
+            <div className="text-xs font-medium text-slate-600">reason_code</div>
+            <div className="mt-0.5 text-sm font-mono font-medium text-slate-900">{caseItem.reason_code || caseItem.dispute_type}</div>
           </div>
           <div className="rounded-md border border-slate-200 p-3">
-            <div className="text-[11px] uppercase text-slate-400">Confidence Score</div>
-            <div className="text-sm font-medium text-slate-800 tabular-nums">{caseItem.confidence_score}%</div>
+            <div className="text-xs font-medium text-slate-600">respond_by</div>
+            <div className="mt-0.5 text-sm font-mono font-medium text-slate-900">{caseItem.respond_by || caseItem.deadline}</div>
+          </div>
+          <div className="rounded-md border border-slate-200 p-3">
+            <div className="text-xs font-medium text-slate-600">status</div>
+            <div className="mt-0.5 text-sm font-medium text-slate-900">{caseItem.status || "open"}</div>
+          </div>
+          <div className="rounded-md border border-slate-200 p-3">
+            <div className="text-xs font-medium text-slate-600">Confidence Score</div>
+            <div className="mt-0.5 text-sm font-medium text-slate-900 tabular-nums">{caseItem.confidence_score}%</div>
           </div>
         </div>
 
@@ -117,6 +140,8 @@ export default function DisputePacket({ caseItem, onExport }) {
         <h3 className="text-sm font-semibold text-slate-900 mb-2">Case Summary</h3>
         <p className="text-sm text-slate-700 leading-relaxed">{caseItem.case_summary}</p>
       </div>
+
+      <RazorpayEvidenceMapper caseItem={caseItem} />
 
       <div className="grid md:grid-cols-2 gap-4">
         <div className="bg-white rounded-lg border border-slate-200 p-4">

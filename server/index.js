@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import express from "express";
 import { SAMPLE_CASES } from "../src/lib/sampleData.js";
 import { EVIDENCE_LABELS, getRequired, scoreCase } from "../src/lib/ruleEngine.js";
+import { RAZORPAY_EVIDENCE_FIELDS } from "../src/lib/razorpayEvidenceMapper.js";
 import { buildFallbackAiJudgment, safeParseAiJson, validateAiCaseJudgment } from "../src/lib/aiGuardrails.js";
 import { buildAiJudgment } from "../src/lib/aiJudgment.js";
 import { buildWorkflowSnapshot, deriveCaseState, FAILURE_STATES } from "../src/lib/workflow.js";
@@ -198,6 +199,13 @@ function cleanText(value) {
     .replaceAll("\u2019", "'");
 }
 
+function deriveRazorpayDisputeStatus(packetStatus) {
+  if (packetStatus === "approved" || packetStatus === "contested") return "under_review";
+  if (packetStatus === "accepted") return "lost";
+  if (packetStatus === "closed") return "closed";
+  return "open";
+}
+
 function toFrontendCase(row) {
   const evidence = row.evidenceItems || [];
   const evidenceFiles = evidence.reduce((files, item) => {
@@ -230,6 +238,11 @@ function toFrontendCase(row) {
     customer_email: row.customerEmail || "",
     amount: Math.round(row.amountPaise / 100),
     currency: row.currency,
+    amount_deducted: Number(row.amountDeducted || 0),
+    reason_code: row.disputeType,
+    reason_description: cleanText(row.disputeReason),
+    respond_by: row.deadline?.toISOString?.().slice(0, 10) || row.deadline,
+    status: deriveRazorpayDisputeStatus(row.packetStatus),
     payment_status: cleanText(row.paymentStatus),
     refund_status: cleanText(row.refundStatus),
     delivery_status: cleanText(row.deliveryStatus),
@@ -451,7 +464,7 @@ function buildCasePayload(body, currentCount = 0) {
     case_id: caseId,
     payment_id: body.payment_id || `pay_${Date.now().toString().slice(-10)}`,
     order_id: body.order_id || `ord_${Date.now().toString().slice(-10)}`,
-    dispute_id: body.dispute_id || `dsp_${Date.now().toString().slice(-8)}`,
+    dispute_id: body.dispute_id || `disp_${Date.now().toString().slice(-8)}`,
     refund_id: body.refund_id || "",
     arn: body.arn || "",
     rrn: body.rrn || "",
@@ -459,7 +472,12 @@ function buildCasePayload(body, currentCount = 0) {
     customer_name: body.customer_name || "New Customer",
     customer_email: body.customer_email || "",
     amount: Number(body.amount || 999),
-    currency: "INR",
+    currency: body.currency || "INR",
+    amount_deducted: Number(body.amount_deducted || 0),
+    reason_code: body.reason_code || disputeType,
+    reason_description: body.reason_description || body.dispute_reason || defaults.disputeReason,
+    respond_by: body.respond_by || body.deadline || new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
+    status: body.status || "open",
     payment_status: body.payment_status || defaults.paymentStatus,
     refund_status: body.refund_status || defaults.refundStatus,
     delivery_status: body.delivery_status || defaults.deliveryStatus,
@@ -532,6 +550,12 @@ function razorpayDisputeToCaseInput(payload) {
     customer_name: payment.email || payment.contact || "Razorpay customer",
     customer_email: payment.email || "",
     amount: Math.round(amountPaise / 100),
+    amount_deducted: Math.round(Number(dispute.amount_deducted || 0) / 100),
+    currency: dispute.currency || payment.currency || "INR",
+    reason_code: dispute.reason_code || disputeType,
+    reason_description: dispute.reason_description || dispute.reason_code || "Razorpay dispute created",
+    respond_by: respondBy.toISOString().slice(0, 10),
+    status: dispute.status || "open",
     dispute_type: disputeType,
     dispute_reason: dispute.reason_description || dispute.reason_code || "Razorpay dispute created",
     customer_message: dispute.reason_description || `Razorpay dispute ${dispute.id} created and requires evidence response.`,
@@ -669,6 +693,7 @@ function normalizeDispute(dispute) {
     id: dispute.id,
     payment_id: dispute.payment_id,
     amount: Math.round(Number(dispute.amount || 0) / 100),
+    amount_deducted: Math.round(Number(dispute.amount_deducted || 0) / 100),
     currency: dispute.currency,
     status: dispute.status,
     phase: dispute.phase,
@@ -678,21 +703,6 @@ function normalizeDispute(dispute) {
     created_at: dispute.created_at,
   };
 }
-
-const RAZORPAY_EVIDENCE_FIELDS = {
-  invoice: "billing_proof",
-  "payment receipt": "billing_proof",
-  "delivery proof": "shipping_proof",
-  "tracking snapshot": "shipping_proof",
-  "customer communication": "customer_communication",
-  "policy snapshot": "term_and_conditions",
-  "refund policy": "refund_cancellation_policy",
-  "refund confirmation": "refund_confirmation",
-  "authorization proof": "explanation_letter",
-  "risk check": "access_activity_log",
-  "device fingerprint": "access_activity_log",
-  "customer identity": "billing_proof",
-};
 
 async function buildRazorpayContestEvidence(caseRow, requestCaseId) {
   const evidence = {};

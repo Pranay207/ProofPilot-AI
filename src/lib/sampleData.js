@@ -1,10 +1,30 @@
 // Synthetic Razorpay-style seed data for ProofPilot AI.
+function deriveDisputeStatus(packetStatus) {
+  if (packetStatus === "approved" || packetStatus === "contested") return "under_review";
+  if (packetStatus === "accepted") return "lost";
+  if (packetStatus === "closed") return "closed";
+  return "open";
+}
+
+function withRazorpayFields(caseItem) {
+  const disputeId = caseItem.dispute_id || `disp_${caseItem.case_id.replace(/\D/g, "").slice(-8) || "sample"}`;
+  return {
+    ...caseItem,
+    dispute_id: disputeId.replace(/^dsp_/, "disp_"),
+    amount_deducted: caseItem.amount_deducted || 0,
+    reason_code: caseItem.reason_code || caseItem.dispute_type,
+    reason_description: caseItem.reason_description || caseItem.dispute_reason,
+    respond_by: caseItem.respond_by || caseItem.deadline,
+    status: caseItem.status || deriveDisputeStatus(caseItem.packet_status),
+  };
+}
+
 export const SAMPLE_CASES = [
   {
     case_id: "PP-2026-0001",
     payment_id: "pay_Nx9Q2kAbCdEfGh",
     order_id: "ord_8801GoodsNotRecv",
-    dispute_id: "dsp_5501",
+    dispute_id: "disp_5501",
     refund_id: "",
     arn: "",
     rrn: "",
@@ -29,7 +49,7 @@ export const SAMPLE_CASES = [
       { event: "payment.captured", timestamp: "2026-08-10T09:14:00Z", status: "ok", detail: "INR 4,299 captured | pay_Nx9Q2kAbCdEfGh" },
       { event: "order shipped", timestamp: "2026-08-11T12:30:00Z", status: "ok", detail: "Forwarded to courier, no POD captured" },
       { event: "customer complained", timestamp: "2026-08-18T08:02:00Z", status: "warn", detail: "Non-receipt claim via support" },
-      { event: "payment.dispute.created", timestamp: "2026-08-20T11:45:00Z", status: "alert", detail: "dsp_5501 raised | goods not received" },
+      { event: "payment.dispute.created", timestamp: "2026-08-20T11:45:00Z", status: "alert", detail: "disp_5501 raised | goods not received" },
       { event: "evidence due", timestamp: "2026-08-20T11:46:00Z", status: "alert", detail: "Delivery proof needed before deadline" }
     ],
     recommended_action: "escalate",
@@ -51,7 +71,7 @@ export const SAMPLE_CASES = [
     case_id: "PP-2026-0002",
     payment_id: "pay_Qz3W8mNoPqRsT",
     order_id: "ord_8802GoodsRecvProof",
-    dispute_id: "dsp_5502",
+    dispute_id: "disp_5502",
     refund_id: "",
     arn: "",
     rrn: "",
@@ -77,7 +97,7 @@ export const SAMPLE_CASES = [
       { event: "order shipped", timestamp: "2026-08-09T18:00:00Z", status: "ok", detail: "Courier dispatch" },
       { event: "delivered", timestamp: "2026-08-14T10:22:00Z", status: "ok", detail: "POD signed | tracking confirmed" },
       { event: "customer complained", timestamp: "2026-08-19T07:30:00Z", status: "warn", detail: "Non-receipt claim" },
-      { event: "payment.dispute.created", timestamp: "2026-08-21T09:00:00Z", status: "alert", detail: "dsp_5502 | goods not received" }
+      { event: "payment.dispute.created", timestamp: "2026-08-21T09:00:00Z", status: "alert", detail: "disp_5502 | goods not received" }
     ],
     recommended_action: "contest",
     action_reason: "Goods not received claim but delivery proof exists - contest.",
@@ -97,7 +117,7 @@ export const SAMPLE_CASES = [
     case_id: "PP-2026-0003",
     payment_id: "pay_Ry4L9pQrStUvW",
     order_id: "ord_8803RefundArn",
-    dispute_id: "dsp_5503",
+    dispute_id: "disp_5503",
     refund_id: "rfd_3301",
     arn: "100200300405503",
     rrn: "RRN5503",
@@ -123,7 +143,7 @@ export const SAMPLE_CASES = [
       { event: "refund initiated", timestamp: "2026-08-01T14:00:00Z", status: "ok", detail: "rfd_3301 initiated" },
       { event: "refund.processed", timestamp: "2026-08-03T09:15:00Z", status: "ok", detail: "ARN 100200300405503 | UTR issued" },
       { event: "customer complained", timestamp: "2026-08-13T11:00:00Z", status: "warn", detail: "Refund not received claim" },
-      { event: "payment.dispute.created", timestamp: "2026-08-22T08:20:00Z", status: "alert", detail: "dsp_5503 | refund not processed" }
+      { event: "payment.dispute.created", timestamp: "2026-08-22T08:20:00Z", status: "alert", detail: "disp_5503 | refund not processed" }
     ],
     recommended_action: "contest",
     action_reason: "Refund processed with ARN + refund ID on record - contest/explain.",
@@ -143,7 +163,7 @@ export const SAMPLE_CASES = [
     case_id: "PP-2026-0004",
     payment_id: "pay_Sz5M2qRsTuVwX",
     order_id: "ord_8804RefundNoProof",
-    dispute_id: "dsp_5504",
+    dispute_id: "disp_5504",
     refund_id: "",
     arn: "",
     rrn: "",
@@ -169,7 +189,7 @@ export const SAMPLE_CASES = [
       { event: "delivered", timestamp: "2026-08-05T16:00:00Z", status: "ok", detail: "Order delivered" },
       { event: "customer complained", timestamp: "2026-08-08T09:00:00Z", status: "warn", detail: "Damaged item, refund requested" },
       { event: "refund promised", timestamp: "2026-08-09T13:00:00Z", status: "warn", detail: "Agent promised refund, not processed" },
-      { event: "payment.dispute.created", timestamp: "2026-08-23T10:10:00Z", status: "alert", detail: "dsp_5504 | refund not processed" }
+      { event: "payment.dispute.created", timestamp: "2026-08-23T10:10:00Z", status: "alert", detail: "disp_5504 | refund not processed" }
     ],
     recommended_action: "accept",
     action_reason: "No refund proof / ARN but merchant promised refund - accept/refund.",
@@ -189,7 +209,7 @@ export const SAMPLE_CASES = [
     case_id: "PP-2026-0005",
     payment_id: "pay_Ta6N3rStUvWxY",
     order_id: "ord_8805DupConfirmed",
-    dispute_id: "dsp_5505",
+    dispute_id: "disp_5505",
     refund_id: "",
     arn: "",
     rrn: "",
@@ -214,7 +234,7 @@ export const SAMPLE_CASES = [
       { event: "payment.captured", timestamp: "2026-08-15T17:01:00Z", status: "ok", detail: "INR 3,499 captured (1st)" },
       { event: "payment.captured", timestamp: "2026-08-15T17:02:30Z", status: "alert", detail: "INR 3,499 captured (2nd, duplicate)" },
       { event: "customer complained", timestamp: "2026-08-16T08:00:00Z", status: "warn", detail: "Duplicate charge reported" },
-      { event: "payment.dispute.created", timestamp: "2026-08-24T09:30:00Z", status: "alert", detail: "dsp_5505 | duplicate payment" }
+      { event: "payment.dispute.created", timestamp: "2026-08-24T09:30:00Z", status: "alert", detail: "disp_5505 | duplicate payment" }
     ],
     recommended_action: "accept",
     action_reason: "Duplicate payment confirmed (same customer, amount, order) - accept/refund.",
@@ -234,7 +254,7 @@ export const SAMPLE_CASES = [
     case_id: "PP-2026-0006",
     payment_id: "pay_Ub7O4sTuVwXyZ",
     order_id: "ord_8806DupSeparate",
-    dispute_id: "dsp_5506",
+    dispute_id: "disp_5506",
     refund_id: "",
     arn: "",
     rrn: "",
@@ -260,7 +280,7 @@ export const SAMPLE_CASES = [
       { event: "payment.captured", timestamp: "2026-08-13T10:15:00Z", status: "ok", detail: "INR 2,999 | order B (separate)" },
       { event: "delivered", timestamp: "2026-08-16T09:00:00Z", status: "ok", detail: "Both orders delivered" },
       { event: "customer complained", timestamp: "2026-08-20T12:00:00Z", status: "warn", detail: "Duplicate claim" },
-      { event: "payment.dispute.created", timestamp: "2026-08-25T08:00:00Z", status: "alert", detail: "dsp_5506 | duplicate payment" }
+      { event: "payment.dispute.created", timestamp: "2026-08-25T08:00:00Z", status: "alert", detail: "disp_5506 | duplicate payment" }
     ],
     recommended_action: "contest",
     action_reason: "Two separate orders - duplicate claim not confirmed - contest.",
@@ -276,4 +296,4 @@ export const SAMPLE_CASES = [
       { timestamp: "2026-08-25T08:07:00Z", actor: "Evidence Radar", action: "complete", detail: "All required evidence present" }
     ]
   }
-];
+].map(withRazorpayFields);

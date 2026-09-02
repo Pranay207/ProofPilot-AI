@@ -26,17 +26,28 @@ function Badge({ tone, label }) {
   return <span className={cn("inline-flex items-center px-2 py-1 rounded text-[11px] font-semibold whitespace-nowrap", toneClasses[tone])}>{label}</span>;
 }
 
-const TYPE_LABEL = {
-  goods_not_received: "Goods not received",
-  refund_not_processed: "Refund not processed",
-  duplicate_payment: "Duplicate payment",
-  unauthorized_transaction: "Unauthorized transaction",
-  product_not_as_described: "Product not as described",
-  cancelled_subscription: "Cancelled subscription charged",
-};
+function formatRazorpayAmount(caseItem) {
+  return `${Number(caseItem.amount || 0).toLocaleString("en-IN")} ${caseItem.currency || "INR"}`;
+}
 
-function formatMoney(value) {
-  return `INR ${Number(value || 0).toLocaleString("en-IN")}`;
+function daysUntil(dateValue) {
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return null;
+  return Math.ceil((date.getTime() - Date.now()) / 86400000);
+}
+
+function RespondByBadge({ value }) {
+  const days = daysUntil(value);
+  const urgent = days !== null && days <= 2;
+  const label = days === null ? value : days < 0 ? "Overdue" : days === 0 ? "Today" : `${days}d left`;
+  return (
+    <div className="space-y-1">
+      <div className="font-mono text-[12px] text-slate-700">{value || "-"}</div>
+      <span className={cn("inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold", urgent ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-700")}>
+        {label}
+      </span>
+    </div>
+  );
 }
 
 function matchesTab(caseItem, tab) {
@@ -103,14 +114,14 @@ export default function RiskQueue({ cases, selectedId, onSelect, onCreateCase })
         <table className="w-full min-w-[1040px] text-sm">
           <thead>
             <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
-              <th className="text-left font-medium px-3 py-3 w-[170px]">Case type</th>
+              <th className="text-left font-medium px-3 py-3 w-[170px]">reason_code</th>
               <th className="text-left font-medium px-3 py-3 w-[150px]">Customer</th>
               <th className="text-left font-medium px-3 py-3">Order ID</th>
-              <th className="text-left font-medium px-3 py-3">Payment ID</th>
-              <th className="text-right font-medium px-3 py-3 w-[110px]">Amount</th>
+              <th className="text-left font-medium px-3 py-3">payment_id</th>
+              <th className="text-right font-medium px-3 py-3 w-[120px]">amount</th>
               <th className="text-center font-medium px-3 py-3 w-[88px]">Risk</th>
               <th className="text-center font-medium px-3 py-3 w-[104px]">Readiness</th>
-              <th className="text-left font-medium px-3 py-3 w-[116px]">Deadline</th>
+              <th className="text-left font-medium px-3 py-3 w-[128px]">respond_by</th>
               <th className="text-left font-medium px-3 py-3 w-[140px]">Action</th>
               <th className="text-left font-medium px-3 py-3 w-[110px]">Status</th>
             </tr>
@@ -145,8 +156,8 @@ export default function RiskQueue({ cases, selectedId, onSelect, onCreateCase })
                   )}
                 >
                   <td className="px-3 py-3 align-middle">
-                    <div className="font-medium text-slate-900 leading-snug">{TYPE_LABEL[c.dispute_type] || c.dispute_type?.replace(/_/g, " ")}</div>
-                    <div className="text-[11px] text-slate-500 mt-1 truncate">{c.dispute_reason}</div>
+                    <div className="font-mono text-[12px] font-semibold text-slate-900 leading-snug">{c.reason_code || c.dispute_type}</div>
+                    <div className="text-[11px] text-slate-500 mt-1 truncate">{c.reason_description || c.dispute_reason}</div>
                   </td>
                   <td className="px-3 py-3 align-middle">
                     <div className="font-medium text-slate-800 truncate">{c.customer_name}</div>
@@ -158,12 +169,12 @@ export default function RiskQueue({ cases, selectedId, onSelect, onCreateCase })
                   <td className="px-3 py-3 align-middle">
                     <div className="font-mono text-[12px] text-slate-500 max-w-[170px] truncate" title={c.payment_id}>{c.payment_id}</div>
                   </td>
-                  <td className="px-3 py-3 text-right align-middle font-semibold text-slate-900 tabular-nums">{formatMoney(c.amount)}</td>
+                  <td className="px-3 py-3 text-right align-middle font-semibold text-slate-900 tabular-nums">{formatRazorpayAmount(c)}</td>
                   <td className="px-3 py-3 text-center align-middle"><Badge tone={risk.color} label={`${c.risk_score}`} /></td>
                   <td className="px-3 py-3 text-center align-middle"><Badge tone={ready.color} label={`${c.readiness_score}%`} /></td>
-                  <td className="px-3 py-3 align-middle text-[12px] text-slate-600 whitespace-nowrap">{c.deadline}</td>
+                  <td className="px-3 py-3 align-middle text-[12px] text-slate-600 whitespace-nowrap"><RespondByBadge value={c.respond_by || c.deadline} /></td>
                   <td className="px-3 py-3 align-middle"><Badge tone={act.color} label={act.label} /></td>
-                  <td className="px-3 py-3 align-middle"><Badge tone="blue" label={c.packet_status || "draft"} /></td>
+                  <td className="px-3 py-3 align-middle"><Badge tone="blue" label={c.status || "open"} /></td>
                 </tr>
               );
             })}

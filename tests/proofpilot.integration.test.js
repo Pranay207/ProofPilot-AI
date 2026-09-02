@@ -16,6 +16,7 @@ delete process.env.EVIDENCE_S3_BUCKET;
 const { app } = await import("../server/index.js");
 const { withAiTimeout } = await import("../src/lib/aiGuardrails.js");
 const { getRequired } = await import("../src/lib/ruleEngine.js");
+const { buildRazorpayEvidenceMapping } = await import("../src/lib/razorpayEvidenceMapper.js");
 
 let server;
 let baseUrl;
@@ -104,6 +105,23 @@ describe("ProofPilot production guardrails", () => {
     assert.equal(second.response.status, 200);
     assert.equal(second.body.duplicate, true);
     assert.equal(second.body.failure_state, "WEBHOOK_DUPLICATE");
+  });
+
+  it("exposes Razorpay-standard dispute fields and evidence mapping", async () => {
+    const casesResponse = await json("/api/cases");
+    const caseItem = casesResponse.body.find((item) => item.case_id === "PP-2026-0001");
+    assert.ok(caseItem);
+    assert.match(caseItem.dispute_id, /^disp_/);
+    assert.equal(caseItem.reason_code, "goods_not_received");
+    assert.equal(caseItem.reason_description, "Customer claims goods not received");
+    assert.equal(caseItem.respond_by, "2026-09-03");
+    assert.equal(caseItem.status, "open");
+    assert.equal(caseItem.currency, "INR");
+    assert.equal(typeof caseItem.amount_deducted, "number");
+
+    const mapping = buildRazorpayEvidenceMapping(caseItem);
+    assert.ok(mapping.required_rows.some((row) => row.evidence_key === "delivery proof" && row.razorpay_parameter === "shipping_proof"));
+    assert.ok(mapping.required_rows.some((row) => row.evidence_key === "invoice" && row.razorpay_parameter === "billing_proof"));
   });
 
   it("blocks contest approval when required evidence is missing", async () => {

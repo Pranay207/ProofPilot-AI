@@ -7,10 +7,15 @@ import EvidenceFileActions from "./EvidenceFileActions";
 function Field({ label, value, mono }) {
   return (
     <div>
-      <div className="text-[11px] uppercase tracking-wide text-slate-400">{label}</div>
-      <div className={`text-sm text-slate-800 ${mono ? "font-mono" : ""}`}>{value || "-"}</div>
+      <div className="text-xs font-medium text-slate-600">{label}</div>
+      <div className={`mt-0.5 text-sm text-slate-900 ${mono ? "font-mono" : ""}`}>{value || "-"}</div>
     </div>
   );
+}
+
+function formatAmount(caseItem) {
+  const currency = caseItem.currency || "INR";
+  return `${Number(caseItem.amount || 0).toLocaleString("en-IN")} ${currency}`;
 }
 
 export default function EvidencePassport({ caseItem, onAttach, onRemove, attachments }) {
@@ -24,13 +29,18 @@ export default function EvidencePassport({ caseItem, onAttach, onRemove, attachm
         <h3 className="text-sm font-semibold text-slate-900 mb-3">Proof Checklist</h3>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <Field label="Case ID" value={caseItem.case_id} mono />
-          <Field label="Payment ID" value={caseItem.payment_id} mono />
+          <Field label="dispute_id" value={caseItem.dispute_id} mono />
+          <Field label="payment_id" value={caseItem.payment_id} mono />
           <Field label="Order ID" value={caseItem.order_id} mono />
-          <Field label="Dispute ID" value={caseItem.dispute_id} mono />
+          <Field label="amount" value={formatAmount(caseItem)} />
+          <Field label="amount_deducted" value={`${Number(caseItem.amount_deducted || 0).toLocaleString("en-IN")} ${caseItem.currency || "INR"}`} />
+          <Field label="reason_code" value={caseItem.reason_code || caseItem.dispute_type} mono />
+          <Field label="reason_description" value={caseItem.reason_description || caseItem.dispute_reason} />
+          <Field label="respond_by" value={caseItem.respond_by || caseItem.deadline} />
+          <Field label="status" value={caseItem.status || "open"} />
           <Field label="Refund ID" value={caseItem.refund_id} mono />
           <Field label="ARN" value={caseItem.arn} mono />
           <Field label="UTR" value={caseItem.utr} mono />
-          <Field label="Amount" value={`INR ${caseItem.amount.toLocaleString("en-IN")}`} />
           <Field label="Payment Status" value={caseItem.payment_status} />
           <Field label="Refund Status" value={caseItem.refund_status} />
           <Field label="Delivery Status" value={caseItem.delivery_status} />
@@ -39,7 +49,7 @@ export default function EvidencePassport({ caseItem, onAttach, onRemove, attachm
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
           <span className="inline-flex items-center gap-1"><User className="w-3.5 h-3.5" /> {caseItem.customer_name}</span>
           <span className="inline-flex items-center gap-1"><Building2 className="w-3.5 h-3.5" /> {caseItem.team} | {caseItem.owner}</span>
-          <span className="inline-flex items-center gap-1"><CalendarClock className="w-3.5 h-3.5" /> Deadline {caseItem.deadline}</span>
+          <span className="inline-flex items-center gap-1"><CalendarClock className="w-3.5 h-3.5" /> respond_by {caseItem.respond_by || caseItem.deadline}</span>
         </div>
       </div>
 
