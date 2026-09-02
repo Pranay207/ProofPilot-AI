@@ -310,6 +310,46 @@ describe("ProofPilot production guardrails", () => {
     assert.ok(removed.body.missing_evidence.includes("delivery proof"));
   });
 
+  it("exports a PDF dispute packet as a downloadable attachment", async () => {
+    const response = await fetch(`${baseUrl}/api/cases/PP-2026-0001/export-pdf`, { method: "POST" });
+    const buffer = Buffer.from(await response.arrayBuffer());
+
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type"), /application\/pdf/);
+    assert.match(response.headers.get("content-disposition"), /PP-2026-0001-dispute-packet\.pdf/);
+    assert.equal(buffer.subarray(0, 4).toString("utf8"), "%PDF");
+    assert.ok(buffer.length > 1000);
+  });
+
+  it("performs bulk case operations and records audit events", async () => {
+    const assigned = await json("/api/cases/bulk-action", {
+      method: "POST",
+      body: JSON.stringify({
+        caseIds: ["PP-2026-0003", "PP-2026-0004"],
+        action: "assign",
+        payload: { assignedTo: "Bulk Reviewer" },
+      }),
+    });
+
+    assert.equal(assigned.response.status, 200);
+    assert.equal(assigned.body.updated, 2);
+    assert.ok(assigned.body.cases.every((caseItem) => caseItem.owner === "Bulk Reviewer"));
+    assert.ok(assigned.body.cases.every((caseItem) => caseItem.audit_log.some((item) => item.action === "bulk_assign")));
+
+    const rejected = await json("/api/cases/bulk-action", {
+      method: "POST",
+      body: JSON.stringify({
+        caseIds: ["PP-2026-0003", "PP-2026-0004"],
+        action: "reject",
+      }),
+    });
+
+    assert.equal(rejected.response.status, 200);
+    assert.equal(rejected.body.updated, 2);
+    assert.ok(rejected.body.cases.every((caseItem) => caseItem.packet_status === "escalated"));
+    assert.ok(rejected.body.cases.every((caseItem) => caseItem.audit_log.some((item) => item.action === "bulk_reject")));
+  });
+
   it("falls back safely when AI output is malformed or timed out", async () => {
     const malformed = await json("/api/ai/judgment/validate", {
       method: "POST",

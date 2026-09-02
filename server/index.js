@@ -10,6 +10,7 @@ import { buildFallbackAiJudgment, safeParseAiJson, validateAiCaseJudgment } from
 import { buildAiJudgment } from "../src/lib/aiJudgment.js";
 import { buildWorkflowSnapshot, deriveCaseState, FAILURE_STATES } from "../src/lib/workflow.js";
 import { buildEvaluationResponse, buildMetricsResponse } from "./services/metricsService.js";
+import { buildDisputePacketPdf } from "./services/pdfExportService.js";
 import { validateDecisionStatus, ensureContestHasEvidence } from "./services/decisionService.js";
 import { scoreAndClassifyCase } from "./services/riskScoringService.js";
 import { registerArchitectureRoutes } from "./routes/architecture.js";
@@ -369,6 +370,60 @@ function addAudit(caseItem, actor, action, detail) {
 function isManualCase(caseItem) {
   const auditLogs = caseItem.auditLogs || caseItem.audit_log || [];
   return auditLogs.some((log) => log.actor === "Merchant Ops" && log.action === "case_created");
+}
+
+const BULK_ACTIONS = new Set(["approve", "reject", "archive", "assign"]);
+
+function validateBulkActionBody(body = {}) {
+  const caseIds = Array.isArray(body.caseIds) ? [...new Set(body.caseIds.map(String).filter(Boolean))] : [];
+  const action = String(body.action || "");
+  if (!caseIds.length) {
+    const error = new Error("At least one case ID is required");
+    error.status = 400;
+    throw error;
+  }
+  if (!BULK_ACTIONS.has(action)) {
+    const error = new Error("Bulk action must be approve, reject, archive, or assign");
+    error.status = 400;
+    throw error;
+  }
+  if (action === "assign" && !String(body.payload?.assignedTo || "").trim()) {
+    const error = new Error("assignedTo is required for bulk assign");
+    error.status = 400;
+    throw error;
+  }
+  return { caseIds, action, payload: body.payload || {} };
+}
+
+function bulkCasePatch(action, payload = {}) {
+  if (action === "approve") return { packet_status: "approved" };
+  if (action === "reject") {
+    return {
+      packet_status: "escalated",
+      recommended_action: "escalate",
+      action_reason: "Bulk rejected by reviewer. Case requires follow-up before any external action.",
+    };
+  }
+  if (action === "archive") return { packet_status: "closed" };
+  if (action === "assign") return { owner: String(payload.assignedTo || "").trim() };
+  return {};
+}
+
+function bulkCaseDbPatch(action, payload = {}) {
+  const patch = bulkCasePatch(action, payload);
+  return {
+    ...("packet_status" in patch ? { packetStatus: patch.packet_status } : {}),
+    ...("recommended_action" in patch ? { recommendedAction: patch.recommended_action } : {}),
+    ...("action_reason" in patch ? { actionReason: patch.action_reason } : {}),
+    ...("owner" in patch ? { owner: patch.owner } : {}),
+  };
+}
+
+function bulkAuditDetail(action, payload = {}) {
+  if (action === "assign") return `Bulk assigned to ${String(payload.assignedTo || "").trim()}`;
+  if (action === "approve") return "Bulk approved for reviewer-controlled dispute workflow";
+  if (action === "reject") return "Bulk rejected and routed for reviewer follow-up";
+  return "Bulk archived from active dispute workflow";
 }
 
 function getWebhookFingerprint(rawBody) {
@@ -1234,6 +1289,106 @@ app.get("/api/cases", async (req, res, next) => {
       include: { evidenceItems: true, timelineEvents: true, auditLogs: true },
     });
     res.json(rows.map(toFrontendCase));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/cases/bulk-action", async (req, res, next) => {
+  try {
+    const { caseIds, action, payload } = validateBulkActionBody(req.body);
+    const detail = bulkAuditDetail(action, payload);
+    const db = await getPrisma();
+
+    if (!db) {
+      const selectedCases = localCases.filter((caseItem) => caseIds.includes(caseItem.id) || caseIds.includes(caseItem.case_id));
+      if (selectedCases.length !== caseIds.length) {
+        return res.status(404).json({ error: "One or more cases were not found" });
+      }
+      if (action === "approve") {
+        selectedCases.forEach((caseItem) => ensureContestHasEvidence(caseItem, "approved"));
+      }
+      const patch = bulkCasePatch(action, payload);
+      localCases = localCases.map((caseItem) => {
+        if (!caseIds.includes(caseItem.id) && !caseIds.includes(caseItem.case_id)) return caseItem;
+        return addAudit({ ...caseItem, ...patch }, "Human Reviewer", `bulk_${action}`, detail);
+      });
+      const updatedCases = attachWorkflow(localCases.filter((caseItem) => caseIds.includes(caseItem.id) || caseIds.includes(caseItem.case_id)));
+      return res.json({ ok: true, action, updated: updatedCases.length, cases: updatedCases });
+    }
+
+    const updatedRows = await db.$transaction(async (tx) => {
+      const rows = await tx.case.findMany({
+        where: {
+          merchantId: req.merchant.id,
+          OR: [{ id: { in: caseIds } }, { caseId: { in: caseIds } }],
+        },
+        include: { evidenceItems: true, timelineEvents: true, auditLogs: true },
+      });
+      if (rows.length !== caseIds.length) {
+        const error = new Error("One or more cases were not found");
+        error.status = 404;
+        throw error;
+      }
+      if (action === "approve") {
+        rows.forEach((row) => ensureContestHasEvidence(toFrontendCase(row), "approved"));
+      }
+
+      const dbPatch = bulkCaseDbPatch(action, payload);
+      await Promise.all(rows.map((row) => tx.case.update({ where: { id: row.id }, data: dbPatch })));
+      await tx.auditLog.createMany({
+        data: rows.map((row) => ({
+          caseId: row.id,
+          actor: "Human Reviewer",
+          action: `bulk_${action}`,
+          detail,
+        })),
+      });
+      return tx.case.findMany({
+        where: { id: { in: rows.map((row) => row.id) } },
+        include: { evidenceItems: true, timelineEvents: true, auditLogs: true },
+      });
+    });
+
+    res.json({ ok: true, action, updated: updatedRows.length, cases: updatedRows.map(toFrontendCase) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/cases/:id/export-pdf", async (req, res, next) => {
+  try {
+    const db = await getPrisma();
+    let caseItem;
+    let merchant = req.merchant;
+
+    if (!db) {
+      caseItem = attachWorkflow(localCases).find((item) => item.id === req.params.id || item.case_id === req.params.id);
+      if (!caseItem) return res.status(404).json({ error: "Case not found" });
+      localCases = localCases.map((item) => {
+        if (item.id !== req.params.id && item.case_id !== req.params.id) return item;
+        return addAudit(item, "ProofPilot Export", "pdf_exported", `Exported PDF dispute packet for ${item.order_id}`);
+      });
+    } else {
+      const row = await getCaseByParam(db, req.params.id, req.merchant.id);
+      if (!row) return res.status(404).json({ error: "Case not found" });
+      caseItem = toFrontendCase(row);
+      merchant = req.merchant;
+      await db.auditLog.create({
+        data: {
+          caseId: row.id,
+          actor: "ProofPilot Export",
+          action: "pdf_exported",
+          detail: `Exported PDF dispute packet for ${row.orderId}`,
+        },
+      });
+    }
+
+    const pdfBuffer = buildDisputePacketPdf(caseItem, { merchant });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${caseItem.case_id}-dispute-packet.pdf"`);
+    res.setHeader("Content-Length", pdfBuffer.length);
+    res.status(200).end(pdfBuffer);
   } catch (error) {
     next(error);
   }

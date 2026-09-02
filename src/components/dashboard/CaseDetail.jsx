@@ -177,6 +177,7 @@ export default function CaseDetail({
   onSubmit,
   onEditDraft,
   onExportPacket,
+  onExportPdf,
   onDelete,
 }) {
   const [localTab, setLocalTab] = useState("evidence-passport");
@@ -283,7 +284,7 @@ export default function CaseDetail({
         {tab === "evidence-passport" && <EvidencePassport caseItem={caseItem} onAttach={onAttach} onRemove={onRemoveEvidence} attachments={attachments} />}
         {tab === "timeline" && <PaymentTimeline caseItem={caseItem} />}
         {tab === "missing-proof" && <MissingProofRadar caseItem={caseItem} recentlyAttached={recentlyAttached} attachments={attachments} onAttach={onAttach} onRemove={onRemoveEvidence} />}
-        {tab === "dispute-packet" && <DisputePacket caseItem={caseItem} onExport={onExportPacket} />}
+        {tab === "dispute-packet" && <DisputePacket caseItem={caseItem} onExport={onExportPacket} onExportPdf={onExportPdf} />}
         {tab === "human-approval" && (
           <HumanApproval
             caseItem={caseItem}

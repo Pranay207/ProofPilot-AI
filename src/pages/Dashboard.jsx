@@ -36,6 +36,7 @@ import { calculateProofPilotMetrics, formatMoney } from "@/lib/metrics";
 import { fetchBackendMetrics } from "@/lib/metricsApi";
 import { apiFetch } from "@/lib/apiClient";
 import { useAuth } from "@/lib/AuthContext";
+import { toast } from "@/components/ui/use-toast";
 
 const CASE_SECTIONS = ["evidence-passport", "timeline", "missing-proof", "dispute-packet", "human-approval"];
 const PAGE_TITLES = {
@@ -1077,6 +1078,33 @@ export default function Dashboard() {
     }
   };
 
+  const handleExportPdf = async () => {
+    if (!selected) return;
+    try {
+      const res = await apiFetch(`/api/cases/${selected.id}/export-pdf`, { method: "POST" });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        throw new Error(payload.error || "PDF export failed");
+      }
+      const blob = await res.blob();
+      const disposition = res.headers.get("content-disposition") || "";
+      const match = disposition.match(/filename="?([^"]+)"?/i);
+      const fileName = match?.[1] || `${selected.case_id}-dispute-packet.pdf`;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      toast({ title: "PDF dispute packet downloaded", description: `${selected.case_id} is ready to share.` });
+      await refreshMetrics();
+    } catch (error) {
+      toast({ title: "PDF export failed", description: error.message || "Please retry after the backend connection is restored.", variant: "destructive" });
+    }
+  };
+
   const handleSubmitToRazorpay = async () => {
     if (!selected || selected.packet_status !== "approved") return;
     try {
@@ -1110,6 +1138,26 @@ export default function Dashboard() {
       setDataError(error.message || "Razorpay dispute sync failed. Check API credentials and backend logs.");
     } finally {
       setSyncingDisputes(false);
+    }
+  };
+
+  const handleBulkAction = async ({ caseIds, action, payload }) => {
+    try {
+      const res = await apiFetch("/api/cases/bulk-action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ caseIds, action, payload }),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(result.error || "Bulk update failed");
+      await loadCasesFromBackend();
+      toast({
+        title: `Successfully updated ${result.updated} cases`,
+        description: `Bulk ${action} completed.`,
+      });
+    } catch (error) {
+      toast({ title: "Bulk update failed", description: error.message || "Please retry after the backend connection is restored.", variant: "destructive" });
+      throw error;
     }
   };
 
@@ -1176,6 +1224,7 @@ export default function Dashboard() {
       onSubmit={handleSubmitToRazorpay}
       onEditDraft={handleEditDraft}
       onExportPacket={handleExportPacket}
+      onExportPdf={handleExportPdf}
       onDelete={handleDeleteCase}
     />
   ) : null;
@@ -1231,7 +1280,13 @@ export default function Dashboard() {
             <div className="space-y-4">
               <QueueInsight onCreateCase={() => setNewCaseOpen(true)} />
               <SummaryCards cases={cases} metrics={backendMetrics} />
-              <RiskQueue cases={cases} selectedId={selected?.id} onSelect={selectCase} onCreateCase={() => setNewCaseOpen(true)} />
+              <RiskQueue
+                cases={cases}
+                selectedId={selected?.id}
+                onSelect={selectCase}
+                onCreateCase={() => setNewCaseOpen(true)}
+                onBulkAction={handleBulkAction}
+              />
             </div>
           ) : null}
         </main>

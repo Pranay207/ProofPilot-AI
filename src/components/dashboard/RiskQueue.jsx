@@ -1,5 +1,5 @@
-﻿import React, { useMemo, useState } from "react";
-import { PlusCircle } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { Archive, CheckCircle2, PlusCircle, UserPlus, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { riskTone, readinessTone, actionTone } from "@/lib/ruleEngine";
 
@@ -73,8 +73,10 @@ function emptyCopy(tab) {
   return "No dispute cases need action";
 }
 
-export default function RiskQueue({ cases, selectedId, onSelect, onCreateCase }) {
+export default function RiskQueue({ cases, selectedId, onSelect, onCreateCase, onBulkAction }) {
   const [tab, setTab] = useState("open");
+  const [selectedCaseIds, setSelectedCaseIds] = useState([]);
+  const [bulkLoading, setBulkLoading] = useState("");
   const counts = useMemo(() => {
     return QUEUE_TABS.reduce((acc, item) => {
       acc[item.id] = cases.filter((caseItem) => matchesTab(caseItem, item.id)).length;
@@ -82,6 +84,42 @@ export default function RiskQueue({ cases, selectedId, onSelect, onCreateCase })
     }, {});
   }, [cases]);
   const visibleCases = useMemo(() => cases.filter((caseItem) => matchesTab(caseItem, tab)), [cases, tab]);
+  const visibleIds = visibleCases.map((caseItem) => caseItem.id || caseItem.case_id);
+  const selectedVisibleCount = selectedCaseIds.filter((id) => visibleIds.includes(id)).length;
+  const allVisibleSelected = visibleIds.length > 0 && selectedVisibleCount === visibleIds.length;
+
+  useEffect(() => {
+    setSelectedCaseIds((current) => current.filter((id) => cases.some((caseItem) => caseItem.id === id || caseItem.case_id === id)));
+  }, [cases]);
+
+  const toggleCase = (id) => {
+    setSelectedCaseIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  };
+
+  const toggleAllVisible = () => {
+    setSelectedCaseIds((current) => {
+      const visible = new Set(visibleIds);
+      if (allVisibleSelected) return current.filter((id) => !visible.has(id));
+      return [...new Set([...current, ...visibleIds])];
+    });
+  };
+
+  const runBulkAction = async (action) => {
+    if (!selectedCaseIds.length || !onBulkAction) return;
+    let payload;
+    if (action === "assign") {
+      const assignedTo = window.prompt("Assign selected cases to:");
+      if (!assignedTo?.trim()) return;
+      payload = { assignedTo: assignedTo.trim() };
+    }
+    setBulkLoading(action);
+    try {
+      await onBulkAction({ caseIds: selectedCaseIds, action, payload });
+      setSelectedCaseIds([]);
+    } finally {
+      setBulkLoading("");
+    }
+  };
 
   return (
     <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
@@ -116,10 +154,38 @@ export default function RiskQueue({ cases, selectedId, onSelect, onCreateCase })
           </button>
         ))}
       </div>
+      {selectedCaseIds.length > 0 && (
+        <div className="flex flex-col gap-2 border-b border-blue-100 bg-blue-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-sm font-semibold text-blue-900">{selectedCaseIds.length} cases selected</div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" disabled={Boolean(bulkLoading)} onClick={() => runBulkAction("approve")} className="inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-60">
+              <CheckCircle2 className="h-3.5 w-3.5" /> Bulk Approve
+            </button>
+            <button type="button" disabled={Boolean(bulkLoading)} onClick={() => runBulkAction("reject")} className="inline-flex items-center gap-1.5 rounded-md border border-amber-200 bg-white px-3 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-60">
+              <XCircle className="h-3.5 w-3.5" /> Bulk Reject
+            </button>
+            <button type="button" disabled={Boolean(bulkLoading)} onClick={() => runBulkAction("archive")} className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60">
+              <Archive className="h-3.5 w-3.5" /> Bulk Archive
+            </button>
+            <button type="button" disabled={Boolean(bulkLoading)} onClick={() => runBulkAction("assign")} className="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-60">
+              <UserPlus className="h-3.5 w-3.5" /> Bulk Assign
+            </button>
+          </div>
+        </div>
+      )}
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1040px] text-sm">
+        <table className="w-full min-w-[1080px] text-sm">
           <thead>
             <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
+              <th className="px-3 py-3 w-10">
+                <input
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  onChange={toggleAllVisible}
+                  aria-label="Select all visible cases"
+                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                />
+              </th>
               <th className="text-left font-medium px-3 py-3 w-[170px]">reason_code</th>
               <th className="text-left font-medium px-3 py-3 w-[150px]">Customer</th>
               <th className="text-left font-medium px-3 py-3">Order ID</th>
@@ -135,7 +201,7 @@ export default function RiskQueue({ cases, selectedId, onSelect, onCreateCase })
           <tbody>
             {!visibleCases.length && (
               <tr>
-                <td colSpan={10} className="px-4 py-10 text-center">
+                <td colSpan={11} className="px-4 py-10 text-center">
                   <div className="mx-auto max-w-sm">
                     <div className="text-sm font-semibold text-slate-900">{emptyCopy(tab)}</div>
                     <p className="mt-1 text-xs text-slate-500">Create a case to score risk, check proof, and prepare a reviewer-approved response.</p>
@@ -152,6 +218,7 @@ export default function RiskQueue({ cases, selectedId, onSelect, onCreateCase })
               const ready = readinessTone(c.readiness_score);
               const act = actionTone(c.recommended_action);
               const isSelected = c.id === selectedId;
+              const rowId = c.id || c.case_id;
               return (
                 <tr
                   key={c.id}
@@ -161,6 +228,15 @@ export default function RiskQueue({ cases, selectedId, onSelect, onCreateCase })
                     isSelected ? "bg-blue-50 ring-1 ring-inset ring-blue-200" : "hover:bg-slate-50"
                   )}
                 >
+                  <td className="px-3 py-3 align-middle" onClick={(event) => event.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={selectedCaseIds.includes(rowId)}
+                      onChange={() => toggleCase(rowId)}
+                      aria-label={`Select ${c.case_id}`}
+                      className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    />
+                  </td>
                   <td className="px-3 py-3 align-middle">
                     <div className="font-mono text-[12px] font-semibold text-slate-900 leading-snug">{c.reason_code || c.dispute_type}</div>
                     <div className="text-[11px] text-slate-500 mt-1 truncate">{c.reason_description || c.dispute_reason}</div>

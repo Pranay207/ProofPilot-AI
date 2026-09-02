@@ -88,7 +88,7 @@ function exportPacket(caseItem, actionLabel) {
   return packet;
 }
 
-export default function DisputePacket({ caseItem, onExport }) {
+export default function DisputePacket({ caseItem, onExport, onExportPdf }) {
   if (!caseItem) return null;
   const act = actionTone(caseItem.recommended_action);
   return (
@@ -109,6 +109,14 @@ export default function DisputePacket({ caseItem, onExport }) {
             >
               <Download className="w-3.5 h-3.5" />
               Export response
+            </button>
+            <button
+              type="button"
+              onClick={onExportPdf}
+              className="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Download PDF
             </button>
           </div>
         </div>
