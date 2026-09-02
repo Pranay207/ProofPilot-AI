@@ -234,21 +234,27 @@ npm test
 
 ProofPilot enforces strict separation between **AI advisory assistance** and **deterministic financial execution** via a Propose–Verify–Approve architecture:
 
-**✅ PROPOSE (AI Advisory Layer):**
-* Parse unstructured customer claims and complaints.
-* Extract critical metadata (dates, order tokens, promised refund amounts).
-* Auto-draft professional, rule-compliant dispute response letters for human review.
-* Surface risk reasons and missing evidence cues to operators.
+> **✅ PROPOSE (AI Advisory Layer):**
+> * Parse unstructured customer claims and complaints.
+> * Extract critical metadata (dates, order tokens, promised refund amounts).
+> * Auto-draft professional, rule-compliant dispute response letters for human review.
+> * Surface risk reasons and missing evidence cues to operators.
+>
+> **🛡️ VERIFY (Deterministic Policy Engine):**
+> * Validate evidence checklist completeness against hard thresholds (minimum 80% readiness required).
+> * Enforce cryptographic webhook verification (HMAC-SHA256) and replay deduplication.
+> * Verify schema safety and JSON structure before enabling submission paths.
+>
+> **❌ APPROVE (Gated Execution & Prohibitions):**
+> * AI is strictly prohibited from triggering dispute submissions to Razorpay without human approval.
+> * AI cannot initiate or mutate financial refunds or ledger entries.
+> * AI cannot bypass deterministic checklist rules or cryptographic checks.
 
-**🛡️ VERIFY (Deterministic Policy Engine):**
-* Validate evidence checklist completeness against hard thresholds (minimum 80% readiness required).
-* Enforce cryptographic webhook verification (HMAC-SHA256) and replay deduplication.
-* Verify schema safety and JSON structure before enabling submission paths.
+---
 
-**❌ APPROVE (Gated Execution & Prohibitions):**
-* AI is strictly prohibited from triggering dispute submissions to Razorpay without human approval.
-* AI cannot initiate or mutate financial refunds or ledger entries.
-* AI cannot bypass deterministic checklist rules or cryptographic checks.
+<div align="center">
+  <i>Engineered for Reliability, Financial Accuracy, and Zero Disputed Value Loss.</i>
+</div>
 
 ---
 
