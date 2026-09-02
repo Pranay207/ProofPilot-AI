@@ -30,6 +30,7 @@ import MetricsDashboard from "@/components/dashboard/MetricsDashboard";
 import AuditLogView from "@/components/dashboard/AuditLogView";
 import AnimatedValue from "@/components/dashboard/AnimatedValue";
 import ReliabilityDashboard from "@/components/dashboard/ReliabilityDashboard";
+import { UserProfileDropdown } from "@/components/UserProfileDropdown";
 import { actionTone, scoreCase, EVIDENCE_LABELS, getRequired } from "@/lib/ruleEngine";
 import { calculateProofPilotMetrics, formatMoney } from "@/lib/metrics";
 import { fetchBackendMetrics } from "@/lib/metricsApi";
@@ -1200,16 +1201,7 @@ export default function Dashboard() {
             <div className="hidden text-xs font-medium text-slate-500 sm:block">
               Merchant Risk Workspace
             </div>
-            <button
-              type="button"
-              onClick={logout}
-              className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
-            >
-              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-[10px] font-semibold text-white">
-                {user?.name ? user.name.trim().charAt(0).toUpperCase() : "M"}
-              </span>
-              Log out
-            </button>
+            <UserProfileDropdown />
           </div>
         </header>
 
