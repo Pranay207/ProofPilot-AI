@@ -6,6 +6,8 @@ export const RAZORPAY_ALLOWED_WEBHOOK_EVENTS = new Set([
   "refund.processed",
   "refund.failed",
   "payment.dispute.created",
+  "payment.dispute.under_review",
+  "payment.dispute.action_required",
   "payment.dispute.won",
   "payment.dispute.lost",
   "payment.dispute.closed",

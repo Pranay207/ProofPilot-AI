@@ -14,6 +14,7 @@ import {
   PackageCheck,
   PlusCircle,
   Radar,
+  RefreshCw,
   ShieldCheck,
   Sparkles,
   TrendingUp,
@@ -430,7 +431,7 @@ function GuardrailsFooter() {
   );
 }
 
-function DataStatusStrip({ dataSource, loading, error, lastSynced, razorpayStatus }) {
+function DataStatusStrip({ dataSource, loading, error, lastSynced, razorpayStatus, onSyncDisputes, syncingDisputes }) {
   const connected = !loading && !error && dataSource === "secure case store";
   const razorpayConnected = Boolean(razorpayStatus?.configured);
   const sources = [
@@ -457,26 +458,37 @@ function DataStatusStrip({ dataSource, loading, error, lastSynced, razorpayStatu
             </p>
           </div>
         </div>
-        <div className="grid gap-2 sm:grid-cols-5 lg:min-w-[720px]">
-          {sources.map((source) => {
-            const Icon = source.icon;
-            return (
-              <div key={source.label} className="rounded-md border border-slate-100 bg-slate-50 px-2.5 py-2">
-                <div className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
-                  <Icon className={`h-3.5 w-3.5 ${source.ok ? "text-emerald-600" : "text-amber-600"}`} />
-                  {source.label}
+        <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
+          <div className="grid gap-2 sm:grid-cols-5 lg:min-w-[720px]">
+            {sources.map((source) => {
+              const Icon = source.icon;
+              return (
+                <div key={source.label} className="rounded-md border border-slate-100 bg-slate-50 px-2.5 py-2">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
+                    <Icon className={`h-3.5 w-3.5 ${source.ok ? "text-emerald-600" : "text-amber-600"}`} />
+                    {source.label}
+                  </div>
+                  <div className="mt-1 truncate text-xs font-medium text-slate-800">{source.value}</div>
                 </div>
-                <div className="mt-1 truncate text-xs font-medium text-slate-800">{source.value}</div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            onClick={onSyncDisputes}
+            disabled={syncingDisputes}
+            className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {syncingDisputes ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            Sync disputes
+          </button>
         </div>
       </div>
     </div>
   );
 }
 
-function OverviewHome({ cases, metrics, onSelectCase, onNavigate, dataSource, loading, error, lastSynced, razorpayStatus }) {
+function OverviewHome({ cases, metrics, onSelectCase, onNavigate, dataSource, loading, error, lastSynced, razorpayStatus, onSyncDisputes, syncingDisputes }) {
 
   return (
     <div className="flex min-h-full flex-col gap-4">
@@ -486,6 +498,8 @@ function OverviewHome({ cases, metrics, onSelectCase, onNavigate, dataSource, lo
         error={error}
         lastSynced={lastSynced}
         razorpayStatus={razorpayStatus}
+        onSyncDisputes={onSyncDisputes}
+        syncingDisputes={syncingDisputes}
       />
 
       <section className="rounded-lg border border-slate-200 bg-white p-5">
@@ -735,6 +749,7 @@ export default function Dashboard() {
   const [dataError, setDataError] = useState("");
   const [lastSynced, setLastSynced] = useState(null);
   const [razorpayStatus, setRazorpayStatus] = useState(null);
+  const [syncingDisputes, setSyncingDisputes] = useState(false);
   const [backendMetrics, setBackendMetrics] = useState(() => calculateProofPilotMetrics([]));
 
   const refreshMetrics = async (fallbackCases = cases) => {
@@ -1028,6 +1043,25 @@ export default function Dashboard() {
     }
   };
 
+  const handleSyncDisputes = async () => {
+    setSyncingDisputes(true);
+    setDataError("");
+    try {
+      const res = await apiFetch("/api/integrations/razorpay/sync-disputes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ count: 25 }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload.error || "Razorpay dispute sync failed");
+      await loadCasesFromBackend();
+    } catch (error) {
+      setDataError(error.message || "Razorpay dispute sync failed. Check API credentials and backend logs.");
+    } finally {
+      setSyncingDisputes(false);
+    }
+  };
+
   const handleDeleteCase = async () => {
     if (!selected || !isManualCase(selected)) return;
     const confirmed = window.confirm(`Delete ${selected.case_id}? This removes the case, evidence, timeline, and audit records.`);
@@ -1140,6 +1174,8 @@ export default function Dashboard() {
               error={dataError}
               lastSynced={lastSynced}
               razorpayStatus={razorpayStatus}
+              onSyncDisputes={handleSyncDisputes}
+              syncingDisputes={syncingDisputes}
             />
           ) : active === "metrics" ? (
             <MetricsDashboard cases={cases} metrics={backendMetrics} />

@@ -95,20 +95,21 @@ app.post("/api/webhooks/razorpay", express.raw({ type: "application/json" }), as
 
     await upsertPaymentSignalFromWebhook(payload, webhookMerchant?.id);
 
-    if (payload.event !== "payment.dispute.created") {
+    if (!String(payload.event || "").startsWith("payment.dispute.")) {
       return res.json({
         ok: true,
         received: true,
         event: payload.event,
-      stored_event: intake.stored,
-      payment_signal: intake.payment_id || null,
-      webhook_event: intake.audit || null,
-      created_case: false,
-    });
+        stored_event: intake.stored,
+        payment_signal: intake.payment_id || null,
+        webhook_event: intake.audit || null,
+        created_case: false,
+        updated_case: false,
+      });
     }
 
-    const created = await createCaseFromRazorpayDispute(payload);
-    await markWebhookCaseCreated(payload, req.body, created.case_id);
+    const processed = await upsertCaseFromRazorpayDispute(payload, webhookMerchant);
+    await markWebhookCaseCreated(payload, req.body, processed.case_id);
     return res.json({
       ok: true,
       received: true,
@@ -116,8 +117,10 @@ app.post("/api/webhooks/razorpay", express.raw({ type: "application/json" }), as
       stored_event: intake.stored,
       payment_signal: intake.payment_id || null,
       webhook_event: intake.audit || null,
-      created_case: created.created,
-      case_id: created.case_id,
+      created_case: processed.created,
+      updated_case: processed.updated,
+      case_id: processed.case_id,
+      lifecycle_status: processed.lifecycle_status,
     });
   } catch (error) {
     next(error);
@@ -206,6 +209,48 @@ function deriveRazorpayDisputeStatus(packetStatus) {
   return "open";
 }
 
+const RAZORPAY_DISPUTE_EVENT_STATUS = {
+  "payment.dispute.created": "open",
+  "payment.dispute.under_review": "under_review",
+  "payment.dispute.action_required": "open",
+  "payment.dispute.won": "won",
+  "payment.dispute.lost": "lost",
+  "payment.dispute.closed": "closed",
+};
+
+const RAZORPAY_EVENT_PACKET_STATUS = {
+  "payment.dispute.created": "draft",
+  "payment.dispute.under_review": "contested",
+  "payment.dispute.action_required": "escalated",
+  "payment.dispute.won": "closed",
+  "payment.dispute.lost": "closed",
+  "payment.dispute.closed": "closed",
+};
+
+function getLifecycleStatusFromEvent(event, fallback = "open") {
+  return RAZORPAY_DISPUTE_EVENT_STATUS[event] || fallback || "open";
+}
+
+function getPacketStatusFromEvent(event, fallback = "draft") {
+  return RAZORPAY_EVENT_PACKET_STATUS[event] || fallback || "draft";
+}
+
+function getLatestRazorpayStatus(row) {
+  const latest = [...(row.timelineEvents || [])]
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+    .find((item) => RAZORPAY_DISPUTE_EVENT_STATUS[item.event]);
+  if (latest) return RAZORPAY_DISPUTE_EVENT_STATUS[latest.event];
+  return deriveRazorpayDisputeStatus(row.packetStatus);
+}
+
+function disputeStatusToWebhookEvent(status) {
+  if (status === "under_review") return "payment.dispute.under_review";
+  if (status === "won") return "payment.dispute.won";
+  if (status === "lost") return "payment.dispute.lost";
+  if (status === "closed") return "payment.dispute.closed";
+  return "payment.dispute.created";
+}
+
 function toFrontendCase(row) {
   const evidence = row.evidenceItems || [];
   const evidenceFiles = evidence.reduce((files, item) => {
@@ -242,7 +287,7 @@ function toFrontendCase(row) {
     reason_code: row.disputeType,
     reason_description: cleanText(row.disputeReason),
     respond_by: row.deadline?.toISOString?.().slice(0, 10) || row.deadline,
-    status: deriveRazorpayDisputeStatus(row.packetStatus),
+    status: getLatestRazorpayStatus(row),
     payment_status: cleanText(row.paymentStatus),
     refund_status: cleanText(row.refundStatus),
     delivery_status: cleanText(row.deliveryStatus),
@@ -578,7 +623,11 @@ async function createCaseFromRazorpayDispute(payload, merchantOverride = null) {
   if (!db) {
     const existing = localCases.find((item) => item.dispute_id === input.dispute_id);
     if (existing) return { created: false, case_id: existing.case_id };
-    const created = buildCasePayload(input, localCases.length);
+    const created = {
+      ...buildCasePayload(input, localCases.length),
+      packet_status: getPacketStatusFromEvent(payload.event, "draft"),
+      status: getLifecycleStatusFromEvent(payload.event, input.status),
+    };
     const withAudit = addAudit(created, "Razorpay Webhook", "webhook_received", `Created from ${payload.event}`);
     localCases = [withAudit, ...localCases];
     return { created: true, case_id: withAudit.case_id };
@@ -588,7 +637,11 @@ async function createCaseFromRazorpayDispute(payload, merchantOverride = null) {
   if (existing) return { created: false, case_id: existing.caseId };
 
   const count = await db.case.count();
-  const item = buildCasePayload(input, count);
+  const item = {
+    ...buildCasePayload(input, count),
+    packet_status: getPacketStatusFromEvent(payload.event, "draft"),
+    status: getLifecycleStatusFromEvent(payload.event, input.status),
+  };
   const merchant = merchantOverride || await getWebhookMerchant();
 
   const created = await db.case.create({
@@ -661,6 +714,155 @@ async function createCaseFromRazorpayDispute(payload, merchantOverride = null) {
   });
 
   return { created: true, case_id: created.caseId };
+}
+
+function buildLifecycleTimelineEvent(payload, input) {
+  const event = payload.event || disputeStatusToWebhookEvent(input.status);
+  const status = getLifecycleStatusFromEvent(event, input.status);
+  const timestamp = payload.created_at ? new Date(Number(payload.created_at) * 1000) : new Date();
+  const detail = event === "payment.dispute.action_required"
+    ? `Razorpay requested more evidence for ${input.dispute_id}`
+    : `Razorpay dispute ${input.dispute_id} moved to ${status}`;
+  return {
+    event,
+    timestamp,
+    status: event === "payment.dispute.lost" || event === "payment.dispute.action_required" ? "alert" : "ok",
+    detail,
+  };
+}
+
+function buildLifecycleAudit(payload, input) {
+  const event = payload.event || disputeStatusToWebhookEvent(input.status);
+  const status = getLifecycleStatusFromEvent(event, input.status);
+  return {
+    timestamp: new Date().toISOString(),
+    actor: "Razorpay Webhook",
+    action: event.replace("payment.dispute.", "dispute_"),
+    detail: event === "payment.dispute.action_required"
+      ? `Razorpay requires additional evidence before the dispute can continue.`
+      : `Razorpay status updated to ${status} for ${input.dispute_id}.`,
+  };
+}
+
+function lifecycleActionPatch(event, current = {}) {
+  if (event === "payment.dispute.action_required") {
+    return {
+      recommended_action: "escalate",
+      action_reason: "Razorpay needs additional evidence. Keep this in the action queue until the proof gap is resolved.",
+    };
+  }
+  if (event === "payment.dispute.won") {
+    return {
+      recommended_action: current.recommended_action || "contest",
+      action_reason: "Razorpay marked this dispute as won. The case can be closed with recovery recorded.",
+    };
+  }
+  if (event === "payment.dispute.lost") {
+    return {
+      recommended_action: current.recommended_action || "accept",
+      action_reason: "Razorpay marked this dispute as lost. Review amount deducted and close the case record.",
+    };
+  }
+  return {};
+}
+
+async function upsertCaseFromRazorpayDispute(payload, merchantOverride = null) {
+  const input = razorpayDisputeToCaseInput(payload);
+  const event = payload.event || disputeStatusToWebhookEvent(input.status);
+  const lifecycleStatus = getLifecycleStatusFromEvent(event, input.status);
+  const nextPacketStatus = getPacketStatusFromEvent(event);
+  const actionPatch = lifecycleActionPatch(event);
+  const timelineEvent = buildLifecycleTimelineEvent(payload, input);
+  const audit = buildLifecycleAudit(payload, input);
+  const db = await getPrisma();
+
+  if (!db) {
+    const existing = localCases.find((item) => item.dispute_id === input.dispute_id);
+    if (!existing) {
+      const created = await createCaseFromRazorpayDispute(payload, merchantOverride);
+      return { ...created, updated: false, lifecycle_status: lifecycleStatus };
+    }
+
+    localCases = localCases.map((caseItem) => {
+      if (caseItem.dispute_id !== input.dispute_id) return caseItem;
+      const hasEvent = (caseItem.timeline_events || []).some((item) => item.event === event);
+      return {
+        ...caseItem,
+        payment_id: input.payment_id || caseItem.payment_id,
+        order_id: input.order_id || caseItem.order_id,
+        amount: input.amount || caseItem.amount,
+        currency: input.currency || caseItem.currency,
+        amount_deducted: input.amount_deducted ?? caseItem.amount_deducted,
+        reason_code: input.reason_code || caseItem.reason_code,
+        reason_description: cleanText(input.reason_description || caseItem.reason_description),
+        dispute_reason: cleanText(input.dispute_reason || caseItem.dispute_reason),
+        respond_by: input.respond_by || caseItem.respond_by,
+        deadline: input.deadline || caseItem.deadline,
+        status: lifecycleStatus,
+        packet_status: nextPacketStatus || caseItem.packet_status,
+        ...actionPatch,
+        timeline_events: hasEvent ? caseItem.timeline_events : [...(caseItem.timeline_events || []), timelineEvent],
+        audit_log: [...(caseItem.audit_log || []), audit],
+      };
+    });
+
+    return { created: false, updated: true, case_id: existing.case_id, lifecycle_status: lifecycleStatus };
+  }
+
+  const merchant = merchantOverride || await getWebhookMerchant();
+  const existing = await db.case.findFirst({
+    where: { disputeId: input.dispute_id, merchantId: merchant.id },
+    include: { evidenceItems: true, timelineEvents: true, auditLogs: true },
+  });
+
+  if (!existing) {
+    const created = await createCaseFromRazorpayDispute(payload, merchant);
+    return { ...created, updated: false, lifecycle_status: lifecycleStatus };
+  }
+
+  await db.case.update({
+    where: { id: existing.id },
+    data: {
+      paymentId: input.payment_id || existing.paymentId,
+      orderId: input.order_id || existing.orderId,
+      customerName: input.customer_name || existing.customerName,
+      customerEmail: input.customer_email || existing.customerEmail,
+      amountPaise: Number(input.amount || Math.round(existing.amountPaise / 100)) * 100,
+      currency: input.currency || existing.currency,
+      paymentStatus: input.payment_status || existing.paymentStatus,
+      disputeType: input.dispute_type,
+      disputeReason: cleanText(input.dispute_reason || existing.disputeReason),
+      deadline: new Date(input.deadline || existing.deadline),
+      packetStatus: nextPacketStatus || existing.packetStatus,
+      ...("recommended_action" in actionPatch ? { recommendedAction: actionPatch.recommended_action } : {}),
+      ...("action_reason" in actionPatch ? { actionReason: actionPatch.action_reason } : {}),
+    },
+  });
+
+  const hasTimelineEvent = existing.timelineEvents.some((item) => item.event === event);
+  if (!hasTimelineEvent) {
+    await db.timelineEvent.create({
+      data: {
+        caseId: existing.id,
+        event: timelineEvent.event,
+        timestamp: timelineEvent.timestamp,
+        status: timelineEvent.status,
+        detail: timelineEvent.detail,
+      },
+    });
+  }
+
+  await db.auditLog.create({
+    data: {
+      caseId: existing.id,
+      timestamp: new Date(audit.timestamp),
+      actor: audit.actor,
+      action: audit.action,
+      detail: audit.detail,
+    },
+  });
+
+  return { created: false, updated: true, case_id: existing.caseId, lifecycle_status: lifecycleStatus };
 }
 
 function getRazorpayConfig() {
@@ -751,6 +953,14 @@ app.get("/api/integrations/razorpay/status", (req, res) => {
     webhook_secret_configured: Boolean(process.env.RAZORPAY_WEBHOOK_SECRET),
     webhook_url: appOrigin ? `${appOrigin}/api/webhooks/razorpay` : "/api/webhooks/razorpay",
     required_event: "payment.dispute.created",
+    required_events: [
+      "payment.dispute.created",
+      "payment.dispute.under_review",
+      "payment.dispute.action_required",
+      "payment.dispute.won",
+      "payment.dispute.lost",
+      "payment.dispute.closed",
+    ],
   });
 });
 
@@ -775,11 +985,6 @@ app.get("/api/integrations/razorpay/disputes", async (req, res, next) => {
 
 app.post("/api/integrations/razorpay/sync-disputes", rateLimit({ max: 10 }), async (req, res, next) => {
   try {
-    const db = await getPrisma();
-    if (!db) {
-      return res.status(503).json({ error: "Razorpay dispute sync requires PostgreSQL mode" });
-    }
-
     const count = Math.min(Number(req.body?.count || req.query.count || 10), 50);
     const data = await callRazorpay(`/disputes?count=${count}`);
     const disputes = Array.isArray(data.items) ? data.items : [];
@@ -792,8 +997,9 @@ app.post("/api/integrations/razorpay/sync-disputes", rateLimit({ max: 10 }), asy
           payment = await callRazorpay(`/payments/${encodeURIComponent(dispute.payment_id)}`).catch(() => null);
         }
 
+        const lifecycleEvent = disputeStatusToWebhookEvent(dispute.status);
         const payload = {
-          event: "payment.dispute.created",
+          event: lifecycleEvent,
           created_at: dispute.created_at || Math.floor(Date.now() / 1000),
           payload: {
             dispute: { entity: dispute },
@@ -801,8 +1007,8 @@ app.post("/api/integrations/razorpay/sync-disputes", rateLimit({ max: 10 }), asy
           },
         };
 
-        const created = await createCaseFromRazorpayDispute(payload, req.merchant);
-        results.push({ dispute_id: dispute.id, payment_id: dispute.payment_id || null, ...created });
+        const synced = await upsertCaseFromRazorpayDispute(payload, req.merchant);
+        results.push({ dispute_id: dispute.id, payment_id: dispute.payment_id || null, event: lifecycleEvent, ...synced });
       } catch (error) {
         results.push({ dispute_id: dispute.id || null, created: false, error: error.message });
       }
@@ -813,7 +1019,8 @@ app.post("/api/integrations/razorpay/sync-disputes", rateLimit({ max: 10 }), asy
       provider: "razorpay",
       fetched: disputes.length,
       created: results.filter((item) => item.created).length,
-      existing: results.filter((item) => item.created === false && !item.error).length,
+      updated: results.filter((item) => item.updated).length,
+      existing: results.filter((item) => item.created === false && !item.updated && !item.error).length,
       failed: results.filter((item) => item.error).length,
       results,
       synced_at: new Date().toISOString(),

@@ -25,9 +25,9 @@ function sign(body) {
   return crypto.createHmac("sha256", process.env.RAZORPAY_WEBHOOK_SECRET).update(body).digest("hex");
 }
 
-function disputePayload(id = "disp_integration_001") {
+function disputePayload(id = "disp_integration_001", event = "payment.dispute.created", status = "open") {
   return {
-    event: "payment.dispute.created",
+    event,
     created_at: Math.floor(Date.now() / 1000),
     payload: {
       dispute: {
@@ -38,7 +38,7 @@ function disputePayload(id = "disp_integration_001") {
           currency: "INR",
           reason_code: "goods_not_received",
           reason_description: "Customer says order was not received",
-          status: "open",
+          status,
           respond_by: Math.floor((Date.now() + 5 * 86400000) / 1000),
         },
       },
@@ -105,6 +105,116 @@ describe("ProofPilot production guardrails", () => {
     assert.equal(second.response.status, 200);
     assert.equal(second.body.duplicate, true);
     assert.equal(second.body.failure_state, "WEBHOOK_DUPLICATE");
+  });
+
+  it("updates existing cases from Razorpay dispute lifecycle webhooks", async () => {
+    const disputeId = "disp_lifecycle_update";
+    const createdRaw = JSON.stringify(disputePayload(disputeId));
+    const reviewRaw = JSON.stringify(disputePayload(disputeId, "payment.dispute.under_review", "under_review"));
+    const wonRaw = JSON.stringify(disputePayload(disputeId, "payment.dispute.won", "won"));
+
+    const created = await json("/api/webhooks/razorpay", {
+      method: "POST",
+      body: createdRaw,
+      headers: { "X-Razorpay-Signature": sign(createdRaw) },
+    });
+    const underReview = await json("/api/webhooks/razorpay", {
+      method: "POST",
+      body: reviewRaw,
+      headers: { "X-Razorpay-Signature": sign(reviewRaw) },
+    });
+    const won = await json("/api/webhooks/razorpay", {
+      method: "POST",
+      body: wonRaw,
+      headers: { "X-Razorpay-Signature": sign(wonRaw) },
+    });
+
+    assert.equal(created.body.created_case, true);
+    assert.equal(underReview.body.updated_case, true);
+    assert.equal(underReview.body.lifecycle_status, "under_review");
+    assert.equal(won.body.updated_case, true);
+    assert.equal(won.body.lifecycle_status, "won");
+
+    const casesResponse = await json("/api/cases");
+    const caseItem = casesResponse.body.find((item) => item.dispute_id === disputeId);
+    assert.ok(caseItem);
+    assert.equal(caseItem.status, "won");
+    assert.equal(caseItem.packet_status, "closed");
+    assert.ok(caseItem.timeline_events.some((item) => item.event === "payment.dispute.under_review"));
+    assert.ok(caseItem.timeline_events.some((item) => item.event === "payment.dispute.won"));
+  });
+
+  it("advertises the full Razorpay dispute webhook event checklist", async () => {
+    const status = await json("/api/integrations/razorpay/status");
+    assert.equal(status.response.status, 200);
+    for (const event of [
+      "payment.dispute.created",
+      "payment.dispute.under_review",
+      "payment.dispute.action_required",
+      "payment.dispute.won",
+      "payment.dispute.lost",
+      "payment.dispute.closed",
+    ]) {
+      assert.ok(status.body.required_events.includes(event));
+    }
+  });
+
+  it("syncs Razorpay disputes from the list API and imports lifecycle status", async () => {
+    const originalFetch = global.fetch;
+    process.env.RAZORPAY_KEY_ID = "rzp_test_sync_key";
+    process.env.RAZORPAY_KEY_SECRET = "sync_secret";
+    global.fetch = async (url, options) => {
+      const target = String(url);
+      if (target.startsWith("https://api.razorpay.com/v1/disputes")) {
+        return new Response(JSON.stringify({
+          count: 1,
+          items: [{
+            id: "disp_sync_won",
+            payment_id: "pay_sync_won",
+            amount: 123400,
+            amount_deducted: 123400,
+            currency: "INR",
+            reason_code: "goods_not_received",
+            reason_description: "Customer says delivery was not received",
+            status: "won",
+            respond_by: Math.floor((Date.now() + 2 * 86400000) / 1000),
+            created_at: Math.floor(Date.now() / 1000),
+          }],
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (target.startsWith("https://api.razorpay.com/v1/payments/pay_sync_won")) {
+        return new Response(JSON.stringify({
+          id: "pay_sync_won",
+          order_id: "order_sync_won",
+          email: "sync@example.in",
+          contact: "9000000000",
+          amount: 123400,
+          currency: "INR",
+          status: "captured",
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      return originalFetch(url, options);
+    };
+
+    try {
+      const synced = await json("/api/integrations/razorpay/sync-disputes", {
+        method: "POST",
+        body: JSON.stringify({ count: 1 }),
+      });
+      assert.equal(synced.response.status, 200);
+      assert.equal(synced.body.created, 1);
+      assert.equal(synced.body.results[0].event, "payment.dispute.won");
+
+      const casesResponse = await json("/api/cases");
+      const caseItem = casesResponse.body.find((item) => item.dispute_id === "disp_sync_won");
+      assert.ok(caseItem);
+      assert.equal(caseItem.status, "won");
+      assert.equal(caseItem.packet_status, "closed");
+    } finally {
+      global.fetch = originalFetch;
+      delete process.env.RAZORPAY_KEY_ID;
+      delete process.env.RAZORPAY_KEY_SECRET;
+    }
   });
 
   it("exposes Razorpay-standard dispute fields and evidence mapping", async () => {
