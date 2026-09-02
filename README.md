@@ -18,7 +18,7 @@
 | :--- | :--- |
 | 🌐 **Live Demo Application** | https://proofpilot-ai.onrender.com/ |
 | 🎥 **5-Minute Video Walkthrough** | [Watch Video on Google Drive](https://drive.google.com/drive/u/0/folders/1jLkM1ABBKEesqdNAS1Q9v3vjmoG64DiF) |
-| 📊 **Judge Reliability & Metrics Export** | `GET /api/reliability/export` |
+| 📊 **Reliability & Metrics Export** | `GET /api/reliability/export` |
 
 ---
 
