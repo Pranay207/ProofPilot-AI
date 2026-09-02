@@ -23,28 +23,36 @@ export function AuthProvider({ children }) {
 
   const loadMerchantProfile = useCallback(async () => {
     if (!window.__PROOFPILOT_AUTH_TOKEN__) {
+      console.log("[AuthContext] No auth token available yet");
       return;
     }
     setLoadingMerchantProfile(true);
+    console.log("[AuthContext] Fetching merchant profile...");
     try {
       const token = window.__PROOFPILOT_AUTH_TOKEN__;
       const response = await fetch("/api/merchant/profile", {
         headers: { Authorization: `Bearer ${token}` },
       });
+      console.log("[AuthContext] Profile response status:", response.status);
       if (!response.ok) {
-        throw new Error(`Failed to fetch merchant profile: ${response.status}`);
+        const errorText = await response.text();
+        throw new Error(`Failed to fetch merchant profile: ${response.status} ${errorText}`);
       }
       const data = await response.json();
+      console.log("[AuthContext] Merchant profile data:", data);
       if (data.ok && data.merchant) {
+        console.log("[AuthContext] Setting user to:", data.merchant.name);
         setUser({
           name: data.merchant.name || "Merchant",
           email: data.merchant.email,
           merchantId: data.merchant.id,
           role: "Merchant Ops",
         });
+      } else {
+        console.warn("[AuthContext] Unexpected profile response format:", data);
       }
     } catch (error) {
-      console.error("Error loading merchant profile:", error);
+      console.error("[AuthContext] Error loading merchant profile:", error);
     } finally {
       setLoadingMerchantProfile(false);
     }
@@ -84,7 +92,7 @@ export function AuthProvider({ children }) {
   }, [auth0.isLoading, auth0.isAuthenticated, checkUserAuth]);
 
   const value = {
-    user: auth0.user || { name: "Merchant", role: "Merchant Ops" },
+    user,  // ✅ Use state user (from merchant profile fetch)
     isAuthenticated: !!auth0.isAuthenticated,
     isLoadingAuth: auth0.isLoading || !authChecked,
     isLoadingPublicSettings: false,
@@ -93,6 +101,7 @@ export function AuthProvider({ children }) {
     navigateToLogin: () => auth0.loginWithRedirect(),
     logout: () => auth0.logout({ logoutParams: { returnTo: window.location.origin } }),
     checkUserAuth,
+    loadingMerchantProfile,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
