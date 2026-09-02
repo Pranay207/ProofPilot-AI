@@ -250,12 +250,3 @@ ProofPilot enforces strict separation between **AI advisory assistance** and **d
 # • AI is strictly prohibited from triggering dispute submissions to Razorpay without human approval.
 # • AI cannot initiate or mutate financial refunds or ledger entries.
 # • AI cannot bypass deterministic checklist rules or cryptographic checks.
-
-
-
----
-
-<div align="center">
-  <b>Built for the Razorpay AI Buildathon 2026</b><br/>
-  <i>Engineered for Reliability, Financial Accuracy, and Zero Disputed Value Loss.</i>
-</div>
