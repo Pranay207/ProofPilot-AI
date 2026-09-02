@@ -230,10 +230,9 @@ npm test
 
 ---
 
-## 7. AI Boundary & Financial Safety Philosophy
+## 7. Architecture Pattern: Propose–Verify–Approve (PVA)
 
 ProofPilot enforces strict separation between **AI advisory assistance** and **deterministic financial execution** via a Propose–Verify–Approve architecture:
-
 
 ✅ PROPOSE (AI Advisory Layer):
   • Parse unstructured customer claims and complaints.
@@ -250,13 +249,6 @@ ProofPilot enforces strict separation between **AI advisory assistance** and **d
   • AI is strictly prohibited from triggering dispute submissions to Razorpay without human approval.
   • AI cannot initiate or mutate financial refunds or ledger entries.
   • AI cannot bypass deterministic checklist rules or cryptographic checks.
-
-❌ AI IS STRICTLY PROHIBITED FROM:
-  • Triggering irreversible dispute submissions to Razorpay without human approval.
-  • Initiating or mutating financial refunds or ledger entries.
-  • Overriding deterministic evidence checklist thresholds (minimum 80% readiness required).
-  • Bypassing cryptographic webhook verification.
-```
 
 ---
 
