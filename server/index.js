@@ -184,6 +184,17 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
+// API middleware - authenticates requests and attaches merchant data
+app.use("/api", async (req, _res, next) => {
+  try {
+    req.auth = await authenticateRequest(req);
+    await attachMerchant(req);
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/api/merchant/profile", async (req, res, next) => {
   try {
     if (!req.merchant) {
@@ -199,16 +210,6 @@ app.get("/api/merchant/profile", async (req, res, next) => {
         created_at: req.merchant.createdAt?.toISOString?.() || req.merchant.createdAt,
       },
     });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.use("/api", async (req, _res, next) => {
-  try {
-    req.auth = await authenticateRequest(req);
-    await attachMerchant(req);
-    next();
   } catch (error) {
     next(error);
   }
