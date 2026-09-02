@@ -27,6 +27,8 @@ import { acceptRazorpayDispute, contestRazorpayDispute, uploadRazorpayDocument }
 import { authenticateRequest, rateLimit } from "./middleware/auth.js";
 import { getQueueHealth, addJob, QUEUE_NAMES, JOB_TYPES } from "./queue/queueClient.js";
 import { autoCollectEvidence, getConnectorStatus } from "./connectors/connectorRegistry.js";
+import { syncShiprocketTracking } from "./connectors/shiprocketConnector.js";
+import { connectorRouter } from "./routes/connectors.js";
 import { startWorkers } from "./queue/workers.js";
 
 export const app = express();
@@ -1015,6 +1017,15 @@ async function buildRazorpayContestEvidence(caseRow, requestCaseId) {
 }
 
 registerArchitectureRoutes(app);
+
+app.set("getPrisma", getPrisma);
+app.set("getCaseByParam", getCaseByParam);
+app.set("toFrontendCase", toFrontendCase);
+app.set("getLocalCases", () => localCases);
+app.set("setLocalCases", (cases) => { localCases = cases; });
+app.set("addAudit", addAudit);
+
+app.use("/api/connectors", connectorRouter);
 
 app.get("/api/webhooks/razorpay", (_req, res) => {
   res.status(405).json({
