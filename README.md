@@ -256,5 +256,6 @@ ProofPilot enforces strict separation between **AI advisory assistance** and **d
 ---
 
 <div align="center">
+  <b>Built for the Razorpay AI Buildathon 2026</b><br/>
   <i>Engineered for Reliability, Financial Accuracy, and Zero Disputed Value Loss.</i>
 </div>
