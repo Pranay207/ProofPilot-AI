@@ -542,7 +542,6 @@ function OverviewHome({ cases, metrics, onSelectCase, onNavigate, dataSource, lo
 
   return (
     <div className="flex min-h-full flex-col gap-4">
-      <ProfileCard user={user} />
       <DataStatusStrip
         dataSource={dataSource}
         loading={loading}
