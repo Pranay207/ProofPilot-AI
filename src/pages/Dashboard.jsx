@@ -431,7 +431,7 @@ function GuardrailsFooter() {
   );
 }
 
-function DataStatusStrip({ dataSource, loading, error, lastSynced, razorpayStatus, onSyncDisputes, syncingDisputes }) {
+function DataStatusStrip({ dataSource, loading, error, lastSynced, razorpayStatus, onSyncDisputes, syncingDisputes, merchantName }) {
   const connected = !loading && !error && dataSource === "secure case store";
   const razorpayConnected = Boolean(razorpayStatus?.configured);
   const sources = [
@@ -451,7 +451,7 @@ function DataStatusStrip({ dataSource, loading, error, lastSynced, razorpayStatu
           </span>
           <div>
             <div className="text-sm font-semibold text-slate-900">
-              {loading ? "Syncing merchant risk workspace" : connected ? "Merchant risk workspace connected" : "Merchant risk workspace ready"}
+              {loading ? "Syncing merchant risk workspace" : connected ? `${merchantName} - Risk workspace connected` : "Merchant risk workspace ready"}
             </div>
             <p className="mt-0.5 text-xs text-slate-500">
               {error || (lastSynced ? `Last synced ${lastSynced.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}` : "Waiting for first sync")}
@@ -488,7 +488,7 @@ function DataStatusStrip({ dataSource, loading, error, lastSynced, razorpayStatu
   );
 }
 
-function OverviewHome({ cases, metrics, onSelectCase, onNavigate, dataSource, loading, error, lastSynced, razorpayStatus, onSyncDisputes, syncingDisputes }) {
+function OverviewHome({ cases, metrics, onSelectCase, onNavigate, dataSource, loading, error, lastSynced, razorpayStatus, onSyncDisputes, syncingDisputes, merchantName }) {
 
   return (
     <div className="flex min-h-full flex-col gap-4">
@@ -500,6 +500,7 @@ function OverviewHome({ cases, metrics, onSelectCase, onNavigate, dataSource, lo
         razorpayStatus={razorpayStatus}
         onSyncDisputes={onSyncDisputes}
         syncingDisputes={syncingDisputes}
+        merchantName={merchantName}
       />
 
       <section className="rounded-lg border border-slate-200 bg-white p-5">
@@ -1176,6 +1177,7 @@ export default function Dashboard() {
               razorpayStatus={razorpayStatus}
               onSyncDisputes={handleSyncDisputes}
               syncingDisputes={syncingDisputes}
+              merchantName={user?.name || "Merchant"}
             />
           ) : active === "metrics" ? (
             <MetricsDashboard cases={cases} metrics={backendMetrics} />

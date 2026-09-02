@@ -2,7 +2,7 @@
 import { useAuth0 } from "@auth0/auth0-react";
 
 const AuthContext = createContext({
-  user: { name: "Merchant", role: "Merchant Ops" },
+  user: { name: "Merchant", role: "Merchant Ops", email: null, merchantId: null },
   isAuthenticated: false,
   isLoadingAuth: false,
   isLoadingPublicSettings: false,
@@ -11,12 +11,44 @@ const AuthContext = createContext({
   navigateToLogin: () => {},
   logout: () => {},
   checkUserAuth: async () => {},
+  loadingMerchantProfile: false,
 });
 
 export function AuthProvider({ children }) {
   const auth0 = useAuth0();
   const [authChecked, setAuthChecked] = useState(false);
   const [authError, setAuthError] = useState(null);
+  const [user, setUser] = useState({ name: "Merchant", role: "Merchant Ops", email: null, merchantId: null });
+  const [loadingMerchantProfile, setLoadingMerchantProfile] = useState(false);
+
+  const loadMerchantProfile = useCallback(async () => {
+    if (!window.__PROOFPILOT_AUTH_TOKEN__) {
+      return;
+    }
+    setLoadingMerchantProfile(true);
+    try {
+      const token = window.__PROOFPILOT_AUTH_TOKEN__;
+      const response = await fetch("/api/merchant/profile", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to fetch merchant profile: ${response.status}`);
+      }
+      const data = await response.json();
+      if (data.ok && data.merchant) {
+        setUser({
+          name: data.merchant.name || "Merchant",
+          email: data.merchant.email,
+          merchantId: data.merchant.id,
+          role: "Merchant Ops",
+        });
+      }
+    } catch (error) {
+      console.error("Error loading merchant profile:", error);
+    } finally {
+      setLoadingMerchantProfile(false);
+    }
+  }, []);
 
   const checkUserAuth = useCallback(async () => {
     if (auth0.isLoading) {
@@ -37,12 +69,13 @@ export function AuthProvider({ children }) {
       window.__PROOFPILOT_AUTH_TOKEN__ = token;
       window.localStorage.setItem("proofpilot_access_token", token);
       setAuthError(null);
+      await loadMerchantProfile();
     } catch (error) {
       setAuthError({ type: "token_error", message: error.message || "Unable to validate token" });
     } finally {
       setAuthChecked(true);
     }
-  }, [auth0]);
+  }, [auth0, loadMerchantProfile]);
 
   useEffect(() => {
     if (!auth0.isLoading) {

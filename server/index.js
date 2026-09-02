@@ -178,6 +178,26 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
+app.get("/api/merchant/profile", async (req, res, next) => {
+  try {
+    if (!req.merchant) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    res.json({
+      ok: true,
+      merchant: {
+        id: req.merchant.id,
+        name: req.merchant.name,
+        email: req.merchant.email,
+        auth_subject: req.merchant.authSubject,
+        created_at: req.merchant.createdAt?.toISOString?.() || req.merchant.createdAt,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.use("/api", async (req, _res, next) => {
   try {
     req.auth = await authenticateRequest(req);
