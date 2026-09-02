@@ -13,7 +13,7 @@
 
 ---
 
-### 🚀 Quick Links & Pitch Video
+###  Quick Links & Pitch Video
 | Resource | Link |
 | :--- | :--- |
 | 🌐 **Live Demo Application** | https://proofpilot-ai.onrender.com/ |
@@ -98,12 +98,12 @@ Every case transition is cryptographically audited and blocked from external Raz
 
 ## 3. Feature Breakdown (Code-Mapped)
 
-### 🚚 1. Shiprocket & Logistics Tracking Connector
+###  1. Shiprocket & Logistics Tracking Connector
 - **Implementation:** [`server/connectors/shiprocketConnector.js`](file:///server/connectors/shiprocketConnector.js), [`server/connectors/connectorRegistry.js`](file:///server/connectors/connectorRegistry.js)
 - **Mechanism:** Interrogates Shiprocket APIs using order references, fetches real-time AWB tracking status, and auto-attaches digital delivery proof timestamps to resolve `goods_not_received` claims immediately without manual courier portal searches.
 - **Fail-Safe Isolation:** Connectors execute in parallel via `Promise.allSettled()`; third-party courier latency or downtime never degrades core webhook ingestion.
 
-### 📄 2. Razorpay-Compliant PDF Exporter
+###  2. Razorpay-Compliant PDF Exporter
 - **Implementation:** [`server/services/pdfExportService.js`](file:///server/services/pdfExportService.js), [`POST /api/cases/:id/export-pdf`](file:///server/index.js)
 - **Mechanism:** Builds a formal, server-side streaming PDF packet containing:
   - Header & Case Summary with claim IDs, transaction hashes, and merchant details.
@@ -111,12 +111,12 @@ Every case transition is cryptographically audited and blocked from external Raz
   - Razorpay-mapped evidence schedule (Invoices, POD, customer chat transcripts, refund ARNs).
   - Clean vector formatting and page-budget management.
 
-### ⚡ 3. Bulk Operations & High-Velocity Ops UI
+###  3. Bulk Operations & High-Velocity Ops UI
 - **Implementation:** [`server/index.js (validateBulkActionBody)`](file:///server/index.js), [`src/components/dashboard/RiskQueue.jsx`](file:///src/components/dashboard/RiskQueue.jsx)
 - **Mechanism:** Enables risk analysts to execute batch operations (`approve`, `reject`, `archive`, `assign`) across multi-selected disputes in atomic database transactions (`db.$transaction`).
 - **Safety Guarantee:** Prevents bulk approval if any selected case fails required evidence validation.
 
-### 🎯 4. SLA Deadline Alerts & Risk Evaluation System
+###  4. SLA Deadline Alerts & Risk Evaluation System
 - **Implementation:** [`server/services/metricsService.js`](file:///server/services/metricsService.js), [`src/lib/mlRiskModel.js`](file:///src/lib/mlRiskModel.js), [`scripts/train-risk-model.js`](file:///scripts/train-risk-model.js)
 - **Mechanism:** Evaluates disputes using an 8-feature loss risk regression model ($F_1 = 0.898$, Recall $= 95.7\%$, Precision $= 84.7\%$).
 - **Calculated Backend Metrics:** Calculates `money_at_risk`, `recoverable_value`, `net_merchant_benefit`, and `false_positive_review_cost` server-side with zero client-side calculation drift.
