@@ -18,6 +18,12 @@ function formatAmount(caseItem) {
   return `${Number(caseItem.amount || 0).toLocaleString("en-IN")} ${currency}`;
 }
 
+function formatDueDate(dateValue) {
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return dateValue || "-";
+  return date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+
 export default function EvidencePassport({ caseItem, onAttach, onRemove, attachments }) {
   if (!caseItem) return null;
   const required = getRequired(caseItem.dispute_type);
@@ -36,7 +42,7 @@ export default function EvidencePassport({ caseItem, onAttach, onRemove, attachm
           <Field label="amount_deducted" value={`${Number(caseItem.amount_deducted || 0).toLocaleString("en-IN")} ${caseItem.currency || "INR"}`} />
           <Field label="reason_code" value={caseItem.reason_code || caseItem.dispute_type} mono />
           <Field label="reason_description" value={caseItem.reason_description || caseItem.dispute_reason} />
-          <Field label="respond_by" value={caseItem.respond_by || caseItem.deadline} />
+          <Field label="Response Due" value={formatDueDate(caseItem.respond_by || caseItem.deadline)} />
           <Field label="status" value={caseItem.status || "open"} />
           <Field label="Refund ID" value={caseItem.refund_id} mono />
           <Field label="ARN" value={caseItem.arn} mono />
@@ -49,7 +55,7 @@ export default function EvidencePassport({ caseItem, onAttach, onRemove, attachm
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
           <span className="inline-flex items-center gap-1"><User className="w-3.5 h-3.5" /> {caseItem.customer_name}</span>
           <span className="inline-flex items-center gap-1"><Building2 className="w-3.5 h-3.5" /> {caseItem.team} | {caseItem.owner}</span>
-          <span className="inline-flex items-center gap-1"><CalendarClock className="w-3.5 h-3.5" /> respond_by {caseItem.respond_by || caseItem.deadline}</span>
+          <span className="inline-flex items-center gap-1"><CalendarClock className="w-3.5 h-3.5" /> Response due {formatDueDate(caseItem.respond_by || caseItem.deadline)}</span>
         </div>
       </div>
 

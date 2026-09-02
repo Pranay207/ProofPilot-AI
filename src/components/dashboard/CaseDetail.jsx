@@ -157,6 +157,12 @@ function formatRazorpayAmount(caseItem) {
   return `${Number(caseItem.amount || 0).toLocaleString("en-IN")} ${caseItem.currency || "INR"}`;
 }
 
+function formatDueDate(dateValue) {
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return dateValue || "-";
+  return date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+
 export default function CaseDetail({
   caseItem,
   activeTab,
@@ -208,7 +214,7 @@ export default function CaseDetail({
               <span className="font-mono">payment_id: {caseItem.payment_id}</span>
               <span className="font-mono">amount: {formatRazorpayAmount(caseItem)}</span>
               <span>status: {caseItem.status || "open"}</span>
-              <span>respond_by: {caseItem.respond_by || caseItem.deadline}</span>
+              <span>Response due: {formatDueDate(caseItem.respond_by || caseItem.deadline)}</span>
               <span>| {caseItem.team} | {caseItem.owner}</span>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">

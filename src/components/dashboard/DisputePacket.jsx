@@ -23,6 +23,12 @@ function labelEvidence(items = []) {
   return items.map((item) => EVIDENCE_LABELS[item] || item);
 }
 
+function formatDueDate(dateValue) {
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return dateValue || "-";
+  return date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+
 function exportPacket(caseItem, actionLabel) {
   const evidenceMapping = buildRazorpayEvidenceMapping(caseItem);
   const packet = {
@@ -113,8 +119,8 @@ export default function DisputePacket({ caseItem, onExport }) {
             <div className="mt-0.5 text-sm font-mono font-medium text-slate-900">{caseItem.reason_code || caseItem.dispute_type}</div>
           </div>
           <div className="rounded-md border border-slate-200 p-3">
-            <div className="text-xs font-medium text-slate-600">respond_by</div>
-            <div className="mt-0.5 text-sm font-mono font-medium text-slate-900">{caseItem.respond_by || caseItem.deadline}</div>
+            <div className="text-xs font-medium text-slate-600">Response Due</div>
+            <div className="mt-0.5 text-sm font-medium text-slate-900">{formatDueDate(caseItem.respond_by || caseItem.deadline)}</div>
           </div>
           <div className="rounded-md border border-slate-200 p-3">
             <div className="text-xs font-medium text-slate-600">status</div>

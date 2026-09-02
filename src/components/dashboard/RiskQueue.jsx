@@ -36,13 +36,19 @@ function daysUntil(dateValue) {
   return Math.ceil((date.getTime() - Date.now()) / 86400000);
 }
 
+function formatDueDate(dateValue) {
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return dateValue || "-";
+  return date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+
 function RespondByBadge({ value }) {
   const days = daysUntil(value);
   const urgent = days !== null && days <= 2;
-  const label = days === null ? value : days < 0 ? "Overdue" : days === 0 ? "Today" : `${days}d left`;
+  const label = days === null ? value : days < 0 ? "Overdue" : days === 0 ? "Today" : days === 1 ? "1 day left" : `${days} days left`;
   return (
     <div className="space-y-1">
-      <div className="font-mono text-[12px] text-slate-700">{value || "-"}</div>
+      <div className="text-[12px] font-medium text-slate-700">{formatDueDate(value)}</div>
       <span className={cn("inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold", urgent ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-700")}>
         {label}
       </span>
@@ -121,7 +127,7 @@ export default function RiskQueue({ cases, selectedId, onSelect, onCreateCase })
               <th className="text-right font-medium px-3 py-3 w-[120px]">amount</th>
               <th className="text-center font-medium px-3 py-3 w-[88px]">Risk</th>
               <th className="text-center font-medium px-3 py-3 w-[104px]">Readiness</th>
-              <th className="text-left font-medium px-3 py-3 w-[128px]">respond_by</th>
+              <th className="text-left font-medium px-3 py-3 w-[128px]">Response Due</th>
               <th className="text-left font-medium px-3 py-3 w-[140px]">Action</th>
               <th className="text-left font-medium px-3 py-3 w-[110px]">Status</th>
             </tr>

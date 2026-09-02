@@ -242,6 +242,11 @@ function PriorityBoard({ cases, onSelectCase, onOpenQueue }) {
   };
 
   const formatRazorpayAmount = (caseItem) => `${Number(caseItem.amount || 0).toLocaleString("en-IN")} ${caseItem.currency || "INR"}`;
+  const formatDueDate = (dateValue) => {
+    const date = new Date(dateValue);
+    if (Number.isNaN(date.getTime())) return dateValue || "-";
+    return date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  };
 
   return (
     <div className="flex min-h-[430px] flex-1 flex-col rounded-lg border border-slate-200 bg-white">
@@ -286,7 +291,7 @@ function PriorityBoard({ cases, onSelectCase, onOpenQueue }) {
                 <div className="truncate">{caseItem.reason_description || caseItem.dispute_reason}</div>
                 <div className="mt-1 font-mono text-[11px] text-slate-500">payment_id: {caseItem.payment_id}</div>
                 <div className="mt-1 text-[11px] font-semibold text-slate-700">amount: {formatRazorpayAmount(caseItem)}</div>
-                <div className="mt-1 text-[11px] text-slate-500">respond_by: {caseItem.respond_by || caseItem.deadline}</div>
+                <div className="mt-1 text-[11px] text-slate-500">Response due: {formatDueDate(caseItem.respond_by || caseItem.deadline)}</div>
               </div>
               <div>
                 <div className="mb-1 text-xs font-medium text-slate-600">Risk</div>
@@ -676,7 +681,7 @@ function NewCaseModal({ open, onClose, onSubmit }) {
                 <input value={form.payment_id} onChange={(e) => setField("payment_id", e.target.value)} placeholder="auto-generated if blank" className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm font-mono" />
               </label>
               <label className="text-xs font-medium text-slate-600">
-                Deadline
+                Response due
                 <input type="date" value={form.deadline} onChange={(e) => setField("deadline", e.target.value)} className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm" />
               </label>
               <label className="text-xs font-medium text-slate-600">
