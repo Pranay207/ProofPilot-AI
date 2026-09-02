@@ -431,6 +431,31 @@ function GuardrailsFooter() {
   );
 }
 
+function ProfileCard({ user }) {
+  if (!user) return null;
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-emerald-100">
+            <span className="text-lg font-bold text-emerald-700">
+              {user.name ? user.name.trim().charAt(0).toUpperCase() : "M"}
+            </span>
+          </div>
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold text-slate-900">{user.name || "Merchant"}</h3>
+            {user.email && <p className="text-xs text-slate-500">{user.email}</p>}
+            {user.merchantId && <p className="mt-1 text-xs text-slate-400">ID: {user.merchantId.slice(0, 12)}...</p>}
+          </div>
+        </div>
+        <div className="text-right">
+          <p className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded">Merchant Account</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DataStatusStrip({ dataSource, loading, error, lastSynced, razorpayStatus, onSyncDisputes, syncingDisputes, merchantName }) {
   const connected = !loading && !error && dataSource === "secure case store";
   const razorpayConnected = Boolean(razorpayStatus?.configured);
@@ -488,10 +513,11 @@ function DataStatusStrip({ dataSource, loading, error, lastSynced, razorpayStatu
   );
 }
 
-function OverviewHome({ cases, metrics, onSelectCase, onNavigate, dataSource, loading, error, lastSynced, razorpayStatus, onSyncDisputes, syncingDisputes, merchantName }) {
+function OverviewHome({ cases, metrics, onSelectCase, onNavigate, dataSource, loading, error, lastSynced, razorpayStatus, onSyncDisputes, syncingDisputes, merchantName, user }) {
 
   return (
     <div className="flex min-h-full flex-col gap-4">
+      <ProfileCard user={user} />
       <DataStatusStrip
         dataSource={dataSource}
         loading={loading}
@@ -1178,6 +1204,7 @@ export default function Dashboard() {
               onSyncDisputes={handleSyncDisputes}
               syncingDisputes={syncingDisputes}
               merchantName={user?.name || "Merchant"}
+              user={user}
             />
           ) : active === "metrics" ? (
             <MetricsDashboard cases={cases} metrics={backendMetrics} />
