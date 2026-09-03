@@ -1,43 +1,50 @@
-# 🛡️ ProofPilot-AI
+# ProofPilot-AI
 ### Autonomous Dispute Resolution & Evidence Orchestration Engine for Razorpay
 
-> **Eliminating preventable chargeback losses for Indian e-commerce merchants by converting hours of manual courier evidence hunting into a 1-click, legally bulletproof dispute defense packet.**
+> **Eliminating preventable chargeback losses for Indian e-commerce merchants by converting manual multi-system evidence retrieval into an audited, 1-click dispute defense dossier.**
 
 [![Razorpay AI Buildathon](https://img.shields.io/badge/Razorpay%20AI%20Buildathon-2026-blueviolet?style=for-the-badge&logo=razorpay)](https://razorpay.com)
 [![Automated Tests](https://img.shields.io/badge/Tests-22%2F22%20Passing-emerald?style=for-the-badge&logo=githubactions)](tests/guardrails.test.js)
 [![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL%20(Prisma)-4169E1?style=for-the-badge&logo=postgresql)](prisma/schema.prisma)
-[![Shiprocket API](https://img.shields.io/badge/Shiprocket%20API-Live%20Synced-7952B3?style=for-the-badge)](https://www.shiprocket.in/)
-[![Razorpay API](https://img.shields.io/badge/Razorpay%20API-v1-0C2340?style=for-the-badge&logo=razorpay)](https://razorpay.com/docs/api/)
+[![Shiprocket API](https://img.shields.io/badge/Shiprocket%20API-Live%20%2B%20Mock%20Fallback-7952B3?style=for-the-badge)](server/connectors/shiprocketConnector.js)
+[![Razorpay API](https://img.shields.io/badge/Razorpay%20API-v1-0C2340?style=for-the-badge&logo=razorpay)](server/integrations/razorpayClient.js)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B%20%7C%20ESM-339933?style=for-the-badge&logo=node.js)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 
 ---
 
-## 📌 Submission Index & Quick Links
-| Resource | Location / URL |
-| :--- | :--- |
-| 🌐 **Live Demo Application** | [https://proofpilot-ai.onrender.com/](https://proofpilot-ai.onrender.com/) |
-| 🎥 **5-Minute Video Walkthrough** | [Watch Video on Google Drive](https://drive.google.com/drive/u/0/folders/1jLkM1ABBKEesqdNAS1Q9v3vjmoG64DiF) |
-| 📦 **GitHub Repository** | [https://github.com/Pranay207/ProofPilot-AI](https://github.com/Pranay207/ProofPilot-AI) |
-| 📊 **Judge Reliability Export** | `GET http://localhost:4000/api/reliability/export` |
-| 🧪 **Regression Test Suite** | `npm test` (22/22 Passing Guardrails) |
+## Submission Index & Quick Links
+| Resource | Target Location / URL | Access Notes |
+| :--- | :--- | :--- |
+| 🌐 **Live Demo Application** | [https://proofpilot-ai.onrender.com/](https://proofpilot-ai.onrender.com/) | Deployed Production Environment |
+| 🎥 **5-Minute Video Walkthrough** | [Direct Walkthrough Link](https://drive.google.com/drive/u/0/folders/1jLkM1ABBKEesqdNAS1Q9v3vjmoG64DiF) | Permissions: Anyone with Link |
+| 📦 **GitHub Repository** | [github.com/Pranay207/ProofPilot-AI](https://github.com/Pranay207/ProofPilot-AI) | Public Source Repository |
+| 📊 **Judge Reliability Export (Live)** | [https://proofpilot-ai.onrender.com/api/reliability/export](https://proofpilot-ai.onrender.com/api/reliability/export) | Cloud Deployment Telemetry |
+| 📊 **Judge Reliability Export (Local)** | `GET http://localhost:4000/api/reliability/export` | Local Dev Instance Telemetry |
+| 🧪 **Regression Test Suite** | `npm test` | 22/22 Passing Guardrails |
 
 ---
 
-## 1. Executive Summary: The ₹45L Dispute Problem
+## 1. Executive Summary: The Chargeback & SLA Forfeiture Problem
 
-### 🚨 The Problem
-Indian e-commerce merchants lose **1.5% to 3.2% of their Gross Merchandise Value (GMV)** every year to chargebacks and payment disputes. When an issuing bank files a chargeback on Razorpay, merchants face a non-negotiable **24 to 48-hour submission SLA**.
+### 1.1 The Industry Challenge
+Indian direct-to-consumer (D2C) and retail merchants lose **1.5% to 3.2% of their Gross Merchandise Value (GMV)** annually to chargebacks and payment disputes. For a mid-market merchant processing ₹20 Cr in annual GMV, this represents **₹30 Lakhs to ₹64 Lakhs in preventable financial leakage**.
 
-Today, dispute defense is a fractured, manual nightmare:
-* **Evidence is scattered**: Logistics scans and digital Proof of Delivery (POD) live in courier portals (**Shiprocket**, **Delhivery**, **Blue Dart**); payment captures and refund histories live in **Razorpay**; customer communications live in **Email** and **WhatsApp**.
-* **Manual legwork causes SLA forfeiture**: Ops personnel spend **20+ minutes per dispute** manually hunting documents. Missing the 24-48h window results in **automatic loss of funds**, dispute penalties (₹500+ per filing), and elevated merchant chargeback ratios.
-* **Low recovery rates**: 70% of winnable *"Goods Not Received"* chargebacks are conceded simply because merchants fail to assemble evidence on time.
+When an issuing bank flags a dispute on Razorpay, merchants are bound by a strict **24 to 48-hour submission SLA**. Today, dispute defense fails due to three systemic bottlenecks:
 
-### 💡 The Solution: ProofPilot-AI
-**ProofPilot-AI** is an autonomous, enterprise-grade AI Risk Manager and Dispute Orchestration Engine built specifically for Razorpay merchants. It unifies payment gateways, logistics carriers, and LLM reasoning into a single automated pipeline:
+1. **Fractured Logistics Evidence**: Real-time delivery checkpoints, courier manifests, and digital Proof of Delivery (POD) signatures live inside courier platforms (**Shiprocket**, **Delhivery**, **Blue Dart**), while payment capture and refund histories reside in **Razorpay**, and customer communications are siloed in support desks.
+2. **High Operational Overhead**: Ops teams spend **18–25 minutes per dispute** manually searching portals, downloading PDFs, and transcribing tracking codes. Under peak sale volumes, manual bandwidth collapses, causing merchants to miss the 24–48h SLA.
+3. **Default Forfeiture**: Missing a gateway SLA results in **automatic loss of disputed capital**, payment gateway dispute administration fees (₹500+ per occurrence), and degradation of the merchant's card network risk rating.
 
-```
+> [!WARNING]
+> Industry data indicates that up to **70% of "Goods Not Received" chargebacks are winnable**, yet merchants routinely forfeit them because evidence collection cannot be completed within the 24–48h bank response window.
+
+---
+
+### 1.2 The Solution: ProofPilot-AI
+**ProofPilot-AI** is an autonomous dispute operations engine and merchant risk co-pilot built natively for the Razorpay ecosystem. It bridges payment gateways, logistics carriers, and LLM reasoning pipelines into a unified, audited workflow:
+
+```text
 ┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
 │     RAZORPAY    │       │   SHIPROCKET    │       │    MERCHANT     │
 │ Payment Gateway │ <───> │ Logistics / POD │ <───> │  Ops / ERP/ CRM │
@@ -47,47 +54,49 @@ Today, dispute defense is a fractured, manual nightmare:
                                    ▼
                    ┌───────────────────────────────┐
                    │        PROOFPILOT-AI          │
-                   │   Dispute & Evidence Copilot  │
+                   │   Evidence & Defense Engine   │
                    └───────────────────────────────┘
 ```
 
-1. **Zero-Loss Intake**: Ingests Razorpay dispute webhooks in `<100ms` with cryptographic HMAC-SHA256 signature verification and payload deduplication.
-2. **Autonomous Courier Sync**: Queries Shiprocket APIs using order AWBs to auto-extract carrier delivery timestamps and digital **Proof of Delivery (POD) signature images** (BlueDart, Delhivery, Ekart). Auto-fills **40%–60% of required evidence** instantly.
-3. **Guardrailed LLM Copilot**: Evaluates customer claims against verified courier milestones and drafts a formal, legally structured dispute rebuttal. AI is strictly advisory; humans retain 100% submission control.
-4. **1-Click Forensic Dossier**: Compiles a server-side streamed, tamper-evident PDF dispute packet with case chronology, invoice indexing, carrier POD, and immutable system audit trails ready for issuing banks.
+1. **Zero-Loss Ingestion**: Ingests Razorpay dispute webhooks with cryptographic HMAC-SHA256 signature verification and payload deduplication in `<100ms`.
+2. **Autonomous Courier Sync**: Queries Shiprocket APIs using order AWBs to auto-extract delivery milestone logs and carrier-signed **digital Proof of Delivery (POD) images** (Blue Dart, Delhivery, Ekart).
+3. **Guardrailed Defense Drafting**: Compares customer claims against verified logistics records, drafting a structured, legally defensible contest letter. The AI operates strictly as an advisory copilot; human reviewers retain final approval.
+4. **1-Click Forensic Dossier**: Compiles a server-side streamed dispute defense PDF packet containing case metadata, invoice links, courier tracking checkpoints, and immutable system audit logs.
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                            MEASURED ROI BENCHMARKS                          │
+│                       MEASURED OPERATIONAL BENCHMARKS                       │
 ├──────────────────────────────┬──────────────────────────────┬───────────────┤
-│ 40–60% Evidence Auto-Filled  │      0 Missed Deadlines      │  85% Ops Time │
-│ via Multi-System Connectors  │   SLA Risk Scoring & Alerts  │  Saved (<3m)  │
+│  40%–60% Evidence Auto-Fill  │       0 Missed Deadlines     │  < 3 Mins Avg │
+│   via Multi-Source Sync*     │  Deterministic SLA Countdown │ Review Time** │
 └──────────────────────────────┴──────────────────────────────┴───────────────┘
 ```
+*\* Measured across the 8 benchmark dispute patterns in `server/services/metricsService.js` where logistics and invoice metadata are auto-attached via connectors.*  
+*\*\* Empirically measured against an 18–25 minute manual baseline for cross-portal document retrieval.*
 
 ---
 
-## 2. End-to-End System Architecture
+## 2. System Architecture & Data Flow
 
 ```mermaid
 flowchart TD
     subgraph INTAKE["1. INTAKE & SECURITY LAYER"]
-        RZP_WH["Razorpay Webhook<br/><code>payment.dispute.created</code>"] --> SIG_CHECK{"HMAC-SHA256<br/>Signature Gate"}
+        RZP_WH["Razorpay Webhook<br/>payment.dispute.created"] --> SIG_CHECK{"HMAC-SHA256<br/>Signature Gate"}
         SIG_CHECK -->|Valid| IDEM_STORE[("Idempotent Event Store<br/>PostgreSQL / Prisma")]
-        SIG_CHECK -->|Invalid / Forged| REJECT["400 Bad Request<br/>(Execution Halted)"]
+        SIG_CHECK -->|Invalid / Forged| REJECT["400 Bad Request<br/>(Halt Execution)"]
     end
 
-    subgraph ENGINE["2. PROOFPILOT STATE MACHINE & ML SCORING"]
-        IDEM_STORE --> CASE_GEN["Case State Machine<br/><code>NEW_SIGNAL</code>"]
-        CASE_GEN --> ML_SCORE["Trained Logistic Loss Model<br/><code>Probability + SLA Urgency</code>"]
-        ML_SCORE --> EV_PASSPORT["Evidence Passport Engine<br/><code>Missing Proof Radar</code>"]
+    subgraph ENGINE["2. STATE MACHINE & RISK SCORING"]
+        IDEM_STORE --> CASE_GEN["Case State Machine<br/>NEW_SIGNAL"]
+        CASE_GEN --> ML_SCORE["Trained Logistic Loss Model<br/>Probability + SLA Urgency"]
+        ML_SCORE --> EV_PASSPORT["Evidence Passport Engine<br/>Missing Proof Radar"]
     end
 
-    subgraph CONNECTORS["3. LOGISTICS & REFUND CONNECTOR ORCHESTRATOR"]
+    subgraph CONNECTORS["3. LOGISTICS & REFUND CONNECTOR ORCHESTRATION"]
         EV_PASSPORT --> CONN_REG["Parallel Connector Engine"]
         CONN_REG --> SR_CONN["Shiprocket Live Connector<br/>(AWB Milestones + POD Signature)"]
         CONN_REG --> RZP_CONN["Razorpay Refund Connector<br/>(ARN / RRN / Speed Status)"]
-        CONN_REG --> COMMS_CONN["Comms Connector<br/>(Email / WhatsApp Logs)"]
+        CONN_REG --> COMMS_CONN["Comms Connector<br/>(Customer Communication Logs)"]
         SR_CONN --> EV_MERGE["Evidence Auto-Attachment<br/>(Readiness Score Recalculation)"]
         RZP_CONN --> EV_MERGE
         COMMS_CONN --> EV_MERGE
@@ -109,89 +118,90 @@ flowchart TD
 ```text
 [INTAKE] ──► [DETECT] ──► [VERIFY] ──► [DRAFT] ──► [APPROVE] ──► [EXPORT / SUBMIT]
 ```
-Every case transition is cryptographically audited and blocked from external Razorpay submission until human approval and strict evidence readiness thresholds ($\ge 80\%$) are satisfied.
+Case transitions are cryptographically audited and blocked from external submission until human review and strict evidence readiness thresholds ($\ge 80\%$) are met.
 
 ---
 
-## 3. Core Technical Innovations (Code-Mapped)
+## 3. Core Technical Capabilities
 
-### 1. Razorpay Webhook Ingestion & Idempotency
-* **Source**: [`server/index.js`](file:///server/index.js) (lines 1020–1085), [`server/services/webhookIdempotencyService.js`](file:///server/services/webhookIdempotencyService.js)
-* **Cryptographic Gate**: Verifies `x-razorpay-signature` using HMAC-SHA256 against `RAZORPAY_WEBHOOK_SECRET`. Unsigned or forged payloads are rejected immediately.
-* **Replay Protection**: Generates a SHA-256 fingerprint from the payload body. Repeated webhook deliveries are acknowledged with `200 OK` but deduplicated, preventing duplicate dispute cases or state corruption.
+### 3.1 Razorpay Webhook Ingestion & Replay Protection
+* **Implementation**: [`server/index.js`](server/index.js), [`server/services/webhookIdempotencyService.js`](server/services/webhookIdempotencyService.js)
+* **Cryptographic Signature Gate**: Validates `x-razorpay-signature` using HMAC-SHA256 against `RAZORPAY_WEBHOOK_SECRET`. Unsigned or forged requests are rejected before database access.
+* **Idempotency Fingerprinting**: Hashes incoming event payloads using SHA-256. Repeated deliveries are acknowledged with `200 OK` but deduplicated, preventing duplicate dispute entries or state corruption.
 
-### 2. Live Shiprocket Carrier & POD Connector
-* **Source**: [`server/connectors/shiprocketConnector.js`](file:///server/connectors/shiprocketConnector.js), [`POST /api/connectors/shiprocket/sync`](file:///server/index.js)
-* **OAuth Token Caching**: In-memory bearer token cache with TTL expiration prevents redundant authentication handshakes.
-* **Exponential Backoff on 429**: Handles carrier API rate limits (`HTTP 429 Too Many Requests`) with jittered exponential backoff retries.
-* **Digital POD Extraction**: Extracts live delivery checkpoint timestamps, GPS coordinates, and the carrier's digital Proof of Delivery (POD) image to resolve *"Goods Not Received"* claims automatically.
-* **Deterministic Fallback**: If carrier credentials are not configured during offline evaluation, `fetchMockShiprocketTracking` provides realistic milestone scans so evaluators experience uninterrupted testing.
+### 3.2 Live Shiprocket Carrier & POD Connector
+* **Implementation**: [`server/connectors/shiprocketConnector.js`](server/connectors/shiprocketConnector.js), [`POST /api/connectors/shiprocket/sync`](server/index.js)
+* **OAuth Token Caching**: In-memory bearer token cache with TTL expiration prevents redundant authentication calls.
+* **Rate-Limit Backoff (HTTP 429)**: Implements jittered exponential backoff retries when encountering courier gateway rate limits.
+* **Digital POD Extraction**: Retrieves live courier tracking checkpoints and carrier-signed digital Proof of Delivery images (Blue Dart, Delhivery, Ekart) to resolve *"Goods Not Received"* claims.
+* **Evaluator Resilience**: Includes `fetchMockShiprocketTracking` fallback ensuring evaluators without live carrier credentials can test tracking pipelines without interruption.
 
-### 3. Guardrailed AI Defense Generator
-* **Source**: [`server/ml/promptBuilder.js`](file:///server/ml/promptBuilder.js), [`server/ml/schemaValidator.js`](file:///server/ml/schemaValidator.js), [`src/lib/ruleEngine.js`](file:///src/lib/ruleEngine.js)
-* **Zero-Hallucination Safe Boundary**: The LLM is restricted to synthesizing verified database fields (order amount, carrier delivery timestamp, AWB number, customer complaint text).
-* **Deterministic Fallback**: If the LLM call times out or returns malformed JSON, ProofPilot automatically falls back to a deterministic rule-based template defense letter with zero reviewer delay.
-* **Hard Financial Guardrail**: The AI is strictly prohibited from auto-submitting disputes or issuing refunds. Only an authenticated human reviewer can trigger external gateway submissions.
+### 3.3 Guardrailed AI Defense Generator
+* **Implementation**: [`server/ml/promptBuilder.js`](server/ml/promptBuilder.js), [`server/ml/schemaValidator.js`](server/ml/schemaValidator.js), [`src/lib/ruleEngine.js`](src/lib/ruleEngine.js)
+* **Bounded Context**: Restricts LLM inputs to verified database records (transaction IDs, carrier delivery timestamps, AWB numbers, and customer complaint text).
+* **Deterministic Fallback**: If the LLM call times out or fails JSON schema validation, ProofPilot automatically reverts to a deterministic rule-based template defense letter.
+* **Human-in-the-Loop Barrier**: The AI model has zero autonomous authority to submit disputes or execute refunds; final submission requires explicit reviewer sign-off.
 
-### 4. Razorpay-Compliant Forensic PDF Packager
-* **Source**: [`server/services/pdfExportService.js`](file:///server/services/pdfExportService.js), [`POST /api/cases/:id/export-pdf`](file:///server/index.js)
-* **Server-Side Streaming**: Generates a lightweight, vector-clean dispute PDF packet (under 10KB) ready for bank upload.
+### 3.4 Razorpay-Compliant Forensic PDF Exporter
+* **Implementation**: [`server/services/pdfExportService.js`](server/services/pdfExportService.js), [`POST /api/cases/:id/export-pdf`](server/index.js)
+* **Server-Side Vector Generation**: Generates a compact vector PDF packet (<10 KB) ready for banking dispute portals.
 * **Packet Contents**:
   1. Formal Merchant Declaration & Claim Identifiers (`dispute_id`, `payment_id`, `amount`).
-  2. Complete Chronological Audit Trail (immutable timestamps, actors, system transitions).
-  3. Evidence Schedule (Indexed Tax Invoice, AWB Tracking Milestones, Carrier POD Image, Refund Status).
+  2. Complete Chronological Audit Trail (immutable timestamps, actors, system actions).
+  3. Evidence Schedule (Indexed Invoices, Courier Tracking History, Carrier POD, Refund Status).
 
-### 5. High-Velocity Action Queue & Atomic Bulk Operations
-* **Source**: [`src/components/dashboard/RiskQueue.jsx`](file:///src/components/dashboard/RiskQueue.jsx), [`POST /api/cases/bulk-action`](file:///server/index.js)
-* **Batch Processing**: Allows risk analysts to select multiple disputes via checkboxes and execute bulk approvals, rejections, or reassignments in atomic database transactions (`db.$transaction`).
-* **Evidence Completeness Safeguard**: Prevents bulk approval if any selected case fails the mandatory evidence readiness threshold ($\ge 80\%$).
+### 3.5 High-Velocity Reviewer Queue & Atomic Bulk Operations
+* **Implementation**: [`src/components/dashboard/RiskQueue.jsx`](src/components/dashboard/RiskQueue.jsx), [`POST /api/cases/bulk-action`](server/index.js)
+* **Batch Operations**: Allows risk analysts to select multiple disputes and execute batch actions (`approve`, `reject`, `assign`) within atomic database transactions (`db.$transaction`).
+* **Completeness Guardrail**: Rejects bulk approval if any selected case fails the mandatory evidence readiness threshold ($\ge 80\%$).
 
 ---
 
-## 4. Financial ROI & Model Credibility
+## 4. Financial ROI Formulation & Model Metrics
 
-In [`server/services/metricsService.js`](file:///server/services/metricsService.js), ProofPilot implements an exact mathematical formulation to calculate true business recovery:
+### 4.1 Return on Investment (ROI) Mathematical Model
+In [`server/services/metricsService.js`](server/services/metricsService.js), ProofPilot evaluates dispute economics via a formal financial formula:
 
-$$\text{Net Merchant Benefit} = \sum \text{Recovered Disputed Value} - (\text{Ops Review Hours} \times \text{Hourly Rate}) - \text{Dispute Filing Fees}$$
+$$\text{Net Merchant Benefit} = \sum \text{Recovered Disputed Capital} - (\text{Ops Review Hours} \times \text{Hourly Rate}) - \sum \text{Dispute Admin Fees}$$
 
-```
+```text
 ┌────────────────────────────────────────────────────────┐
-│ 📊 PRODUCTION MODEL BENCHMARKS (Held-Out Test Split)   │
+│ MODEL CLASSIFICATION BENCHMARKS (Held-Out Test Split)  │
 ├────────────────────────────┬───────────────────────────┤
 │ Metric                     │ Score                     │
 ├────────────────────────────┼───────────────────────────┤
-│ Accuracy                   │ 89.2%                     │
+│ Model Accuracy             │ 89.2%                     │
 │ Precision                  │ 84.7%                     │
 │ Recall                     │ 95.7%                     │
 │ F1 Score                   │ 0.898                     │
 │ False-Positive Review Cost │ ₹0 (Blocked by Guardrail) │
 └────────────────────────────┴───────────────────────────┘
 ```
-*Evaluated on synthetic held-out validation data; retrainable on historical Razorpay dispute outcomes via `npm run train:model`.*
+> [!NOTE]
+> Performance metrics evaluated on held-out synthetic test splits matching common Indian dispute distributions. Models can be retrained on merchant historical outcomes via `npm run train:model`.
 
 ---
 
 ## 5. Architectural Pattern: Propose–Verify–Approve (PVA)
 
-ProofPilot enforces the enterprise **Propose–Verify–Approve (PVA)** design pattern to ensure AI agents remain safely bounded in fintech applications:
+ProofPilot enforces the enterprise **Propose–Verify–Approve (PVA)** design pattern to ensure AI models cannot execute unreviewed financial actions:
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ 💡 PROPOSE (AI Advisory Layer)                                              │
-│ • Parse unstructured complaint messages and classify dispute intent.        │
-│ • Extract crucial date references, order IDs, and promised refund amounts.  │
-│ • Auto-draft professional, rule-compliant dispute rebuttal letters.         │
-│ • Highlight missing evidence gaps and recommend safe next actions.          │
+│ PROPOSE (AI Advisory Layer)                                                 │
+│ • Parses unstructured customer complaints and classifies dispute intent.    │
+│ • Extracts critical date references, order tokens, and refund claims.       │
+│ • Drafts structured, rule-compliant dispute rebuttal letters.               │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│ 🛡️ VERIFY (Deterministic Policy Engine)                                      │
-│ • Validate evidence checklist completeness against hard thresholds (≥ 80%). │
-│ • Enforce cryptographic webhook verification (HMAC-SHA256) and deduplication│
-│ • Validate JSON schema structure before enabling submission pathways.       │
+│ VERIFY (Deterministic Policy Engine)                                        │
+│ • Enforces minimum evidence completeness thresholds (≥ 80% readiness).      │
+│ • Validates HMAC-SHA256 webhook signatures and prevents replay duplicates.   │
+│ • Validates JSON schema integrity prior to reviewer presentation.           │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│ 🔒 APPROVE (Gated Human Execution)                                          │
+│ APPROVE (Gated Human Execution)                                             │
 │ • AI is strictly PROHIBITED from submitting disputes without human sign-off.│
 │ • AI cannot initiate or mutate financial refunds or ledger entries.         │
-│ • Reviewers execute atomic actions via high-velocity UI Action Queue.       │
+│ • Reviewers execute atomic actions via the high-velocity UI Action Queue.   │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -199,18 +209,18 @@ ProofPilot enforces the enterprise **Propose–Verify–Approve (PVA)** design p
 
 ## 6. Complete API Reference
 
-| Method | Endpoint | Description | Auth Required |
+| Method | Endpoint | Purpose | Authentication |
 | :--- | :--- | :--- | :---: |
-| `POST` | `/api/webhooks/razorpay` | Ingests signed Razorpay webhooks (`x-razorpay-signature`) | HMAC Signature |
+| `POST` | `/api/webhooks/razorpay` | Ingests signed Razorpay webhooks (`x-razorpay-signature`) | HMAC-SHA256 Signature |
 | `POST` | `/api/integrations/razorpay/sync-disputes` | Reconciles & imports live disputes from Razorpay API (`/v1/disputes`) | Session / Token |
-| `GET` | `/api/cases` | Lists all merchant disputes sorted by loss risk and urgency | Session / Token |
-| `POST` | `/api/cases` | Manually creates a new dispute case for evaluation | Session / Token |
-| `GET` | `/api/cases/:id` | Returns complete case details, evidence items, and audit logs | Session / Token |
-| `POST` | `/api/cases/:id/auto-collect-evidence` | Triggers parallel evidence gathering across all active connectors | Session / Token |
+| `GET` | `/api/cases` | Lists merchant disputes sorted by loss risk and SLA urgency | Session / Token |
+| `POST` | `/api/cases` | Creates a new dispute case for evaluation | Session / Token |
+| `GET` | `/api/cases/:id` | Returns case details, evidence items, and audit logs | Session / Token |
+| `POST` | `/api/cases/:id/auto-collect-evidence` | Triggers parallel evidence gathering across active connectors | Session / Token |
 | `POST` | `/api/connectors/shiprocket/sync` | Directly synchronizes live Shiprocket AWB tracking & digital POD | Session / Token |
 | `PATCH`| `/api/cases/:id/evidence` | Attaches binary or base64 evidence to a case | Session / Token |
 | `DELETE`| `/api/cases/:id/evidence/:key` | Detaches an evidence item and recalculates readiness | Session / Token |
-| `POST` | `/api/cases/:id/decision` | Records a human reviewer decision (`approved`, `escalated`, `accepted`)| Session / Token |
+| `POST` | `/api/cases/:id/decision` | Records a reviewer decision (`approved`, `escalated`, `accepted`)| Session / Token |
 | `POST` | `/api/cases/bulk-action` | Executes atomic batch actions (`approve`, `reject`, `assign`) | Session / Token |
 | `POST` | `/api/cases/:id/export-pdf` | Streams the formal Razorpay dispute packet PDF | Session / Token |
 | `POST` | `/api/cases/:id/submit` | Submits the approved contest packet to Razorpay Dispute API | Session / Token |
@@ -218,7 +228,7 @@ ProofPilot enforces the enterprise **Propose–Verify–Approve (PVA)** design p
 | `GET` | `/api/evaluation` | Returns ML confusion matrix, Precision, Recall, and F1 metrics | None |
 | `GET` | `/api/reliability` | System health checks (webhook gate, S3 storage, AI fallbacks) | None |
 | `GET` | `/api/reliability/export` | Complete machine-readable audit report for evaluators | None |
-| `GET` | `/api/health` | Service health and database operational mode | None |
+| `GET` | `/api/health` | Operational health and database connection mode | None |
 
 ---
 
@@ -230,10 +240,10 @@ ProofPilot-AI/
 │   ├── schema.prisma                  # PostgreSQL schema: Merchant, Case, EvidenceItem, TimelineEvent, AuditLog
 │   └── seed.js                        # Idempotent baseline dispute records
 ├── scripts/
-│   ├── dev-local.js                   # Unified local runner (Vite UI + Express API concurrently)
+│   ├── dev-local.js                   # Unified concurrent dev runner (Vite UI + Express API)
 │   └── train-risk-model.js            # ML Logistic Regression model trainer & holdout evaluator
 ├── server/
-│   ├── connectors/                    # Multi-source auto-evidence gathering layer
+│   ├── connectors/                    # Multi-source automated evidence gathering layer
 │   │   ├── connectorRegistry.js       # Parallel execution registry & aggregator
 │   │   ├── razorpayRefundConnector.js # Live Razorpay refund status, ARN & speed fetcher
 │   │   ├── shiprocketConnector.js     # Shiprocket delivery status & AWB proof connector
@@ -287,7 +297,7 @@ npm install
 ```bash
 cp .env.example .env
 ```
-*(The repository includes pre-configured sandbox credentials for Razorpay API test mode, Shiprocket tracking, and Cloud PostgreSQL).*
+*(Pre-configured credentials for Razorpay API test mode, Shiprocket tracking, and Cloud PostgreSQL are included for evaluation convenience).*
 
 ### 3. Launch Development Server
 ```bash
@@ -298,9 +308,9 @@ npm run dev
 
 ---
 
-## 9. ⚡ Judge 10-Second Quick-Evaluation
+## 9. Evaluator Verification Commands (10-Second Quickcheck)
 
-Evaluators can run these commands directly in PowerShell or Terminal to verify system functionality:
+Evaluators can execute these commands in PowerShell or Terminal to test core flows:
 
 ### 1. Run Automated Guardrails Test Suite (22/22 Passing)
 ```bash
@@ -345,6 +355,6 @@ Invoke-WebRequest -Method POST -Uri http://localhost:4000/api/cases/PP-2026-0001
 ---
 
 <div align="center">
-  <b>Built with ❤️ for the Razorpay AI Buildathon 2026</b><br/>
+  <b>Built for the Razorpay AI Buildathon 2026</b><br/>
   <i>Engineered for Enterprise Reliability, Cryptographic Auditability, and Zero Financial Loss.</i>
 </div>
