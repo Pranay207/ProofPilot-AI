@@ -1,4 +1,8 @@
 import { FAILURE_STATES } from "../../src/lib/workflow.js";
+import { scoreCase } from "../../src/lib/ruleEngine.js";
+
+export const READINESS_THRESHOLD = 80;
+export const READINESS_BLOCK_MESSAGE = "Case readiness below required 80% threshold";
 
 // Valid human decision statuses that can be set via the PATCH /api/cases/:id/decision endpoint
 const ALLOWED_DECISION_STATUSES = new Set(["approved", "escalated", "accepted", "contested", "closed"]);
@@ -12,14 +16,20 @@ export function validateDecisionStatus(status) {
   }
 }
 
-export function ensureContestHasEvidence(caseItem, status) {
-  const isContestApproval = status === "approved" || status === "contested";
-  if (isContestApproval && Number(caseItem.readiness_score || 0) < 80) {
-    const error = new Error(
-      "Contest approval blocked: required proof readiness must reach 80% before contesting. Upload missing evidence or escalate for human review."
-    );
-    error.status = 409;
+export function getCurrentReadiness(caseItem) {
+  return Number(scoreCase(caseItem).readiness_score || 0);
+}
+
+export function ensureReadinessThreshold(caseItem) {
+  if (getCurrentReadiness(caseItem) < READINESS_THRESHOLD) {
+    const error = new Error(READINESS_BLOCK_MESSAGE);
+    error.status = 422;
     error.failureState = FAILURE_STATES.NEEDS_MANUAL_REVIEW;
     throw error;
   }
+}
+
+export function ensureContestHasEvidence(caseItem, status) {
+  const isContestApproval = status === "approved" || status === "contested";
+  if (isContestApproval) ensureReadinessThreshold(caseItem);
 }

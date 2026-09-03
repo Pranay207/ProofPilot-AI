@@ -5,5 +5,7 @@ export const CASE_ROUTE_CONTRACT = {
   editDraft: "PATCH /api/cases/:id/draft",
   decide: "PATCH /api/cases/:id/decision",
   exportPacket: "POST /api/cases/:id/export",
+  submit: "POST /api/cases/:id/submit",
+  bulkAction: "POST /api/cases/bulk-action",
   delete: "DELETE /api/cases/:id",
 };

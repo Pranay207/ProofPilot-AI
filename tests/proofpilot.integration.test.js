@@ -82,29 +82,41 @@ describe("ProofPilot production guardrails", () => {
   });
 
   it("rejects unsigned or invalid Razorpay webhooks without creating a case", async () => {
-    const raw = JSON.stringify(disputePayload("disp_invalid_signature"));
+    const disputeId = "disp_invalid_signature";
+    const before = await json("/api/cases");
+    const raw = JSON.stringify(disputePayload(disputeId));
     const { response, body } = await json("/api/webhooks/razorpay", {
       method: "POST",
       body: raw,
       headers: { "X-Razorpay-Signature": "bad_signature" },
     });
 
+    const after = await json("/api/cases");
     assert.equal(response.status, 400);
     assert.equal(body.failure_state, "WEBHOOK_SIGNATURE_FAILED");
+    assert.equal(after.body.length, before.body.length);
+    assert.equal(after.body.some((item) => item.dispute_id === disputeId), false);
   });
 
   it("creates one case for a valid dispute webhook and ignores the duplicate safely", async () => {
-    const raw = JSON.stringify(disputePayload("disp_duplicate_safe"));
+    const disputeId = "disp_duplicate_safe";
+    const before = await json("/api/cases");
+    const raw = JSON.stringify(disputePayload(disputeId));
     const headers = { "X-Razorpay-Signature": sign(raw) };
 
     const first = await json("/api/webhooks/razorpay", { method: "POST", body: raw, headers });
     const second = await json("/api/webhooks/razorpay", { method: "POST", body: raw, headers });
+    const after = await json("/api/cases");
+    const matching = after.body.filter((item) => item.dispute_id === disputeId);
 
     assert.equal(first.response.status, 200);
     assert.equal(first.body.created_case, true);
     assert.equal(second.response.status, 200);
     assert.equal(second.body.duplicate, true);
+    assert.equal(second.body.created_case, undefined);
     assert.equal(second.body.failure_state, "WEBHOOK_DUPLICATE");
+    assert.equal(matching.length, 1);
+    assert.equal(after.body.length, before.body.length + 1);
   });
 
   it("updates existing cases from Razorpay dispute lifecycle webhooks", async () => {
@@ -244,9 +256,53 @@ describe("ProofPilot production guardrails", () => {
       body: JSON.stringify({ status: "approved" }),
     });
 
-    assert.equal(response.status, 409);
-    assert.match(body.error, /proof/i);
+    assert.equal(response.status, 422);
+    assert.equal(body.error, "Case readiness below required 80% threshold");
     assert.equal(body.failure_state, "NEEDS_MANUAL_REVIEW");
+  });
+
+  it("rejects direct submit when readiness is below 80% and does not submit", async () => {
+    const before = await json("/api/cases");
+    const caseItem = before.body.find((item) => item.case_id === "PP-2026-0001");
+    assert.ok(Number(caseItem.readiness_score || 0) < 80);
+    const packetBefore = caseItem.packet_status;
+
+    const submitted = await json("/api/cases/PP-2026-0001/submit", {
+      method: "POST",
+      body: JSON.stringify({ action: "contest" }),
+    });
+
+    const after = await json("/api/cases");
+    const unchanged = after.body.find((item) => item.case_id === "PP-2026-0001");
+
+    assert.equal(submitted.response.status, 422);
+    assert.equal(submitted.body.error, "Case readiness below required 80% threshold");
+    assert.equal(unchanged.packet_status, packetBefore);
+    assert.equal(unchanged.audit_log?.some((event) => String(event.action || "").includes("submitted")), false);
+  });
+
+  it("rejects bulk approve when any case in the batch is below 80% readiness", async () => {
+    const before = await json("/api/cases");
+    const low = before.body.find((item) => item.case_id === "PP-2026-0001");
+    const other = before.body.find((item) => item.case_id === "PP-2026-0002");
+    assert.ok(Number(low.readiness_score || 0) < 80);
+
+    const bulk = await json("/api/cases/bulk-action", {
+      method: "POST",
+      body: JSON.stringify({
+        caseIds: ["PP-2026-0001", "PP-2026-0002"],
+        action: "approve",
+      }),
+    });
+
+    const after = await json("/api/cases");
+    const lowAfter = after.body.find((item) => item.case_id === "PP-2026-0001");
+    const otherAfter = after.body.find((item) => item.case_id === "PP-2026-0002");
+
+    assert.equal(bulk.response.status, 422);
+    assert.equal(bulk.body.error, "Case readiness below required 80% threshold");
+    assert.equal(lowAfter.packet_status, low.packet_status);
+    assert.equal(otherAfter.packet_status, other.packet_status);
   });
 
   it("records reviewer reason for human decisions", async () => {

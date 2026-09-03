@@ -50,28 +50,42 @@ export function getRequired(disputeType) {
   return REQUIRED_EVIDENCE[disputeType] || [];
 }
 
+function getPersistedEvidenceRecord(caseItem, key) {
+  const records = caseItem.persisted_evidence || {};
+  if (records[key]) return records[key];
+  const match = Object.entries(records).find(([recordKey]) => recordKey.toLowerCase() === String(key).toLowerCase());
+  return match?.[1] || null;
+}
+
 export function hasEvidence(caseItem, key) {
   const files = caseItem.evidence_files || {};
   const exact = files[key];
   if (exact) {
-    return typeof exact === "string"
+    const filePresent = typeof exact === "string"
       ? Boolean(exact.trim())
       : Boolean(exact.file_name || exact.download_url || exact.storage_key || exact.upload_id);
+    if (filePresent) return true;
   }
-  const match = Object.entries(files).find(([fileKey]) => fileKey.toLowerCase() === key.toLowerCase());
-  if (!match) return false;
-  const file = match[1];
-  return typeof file === "string"
-    ? Boolean(file.trim())
-    : Boolean(file.file_name || file.download_url || file.storage_key || file.upload_id);
+  const match = Object.entries(files).find(([fileKey]) => fileKey.toLowerCase() === String(key).toLowerCase());
+  if (match) {
+    const file = match[1];
+    const filePresent = typeof file === "string"
+      ? Boolean(file.trim())
+      : Boolean(file.file_name || file.download_url || file.storage_key || file.upload_id);
+    if (filePresent) return true;
+  }
+  const persisted = getPersistedEvidenceRecord(caseItem, key);
+  return Boolean(persisted?.attached_at && persisted.status !== "failed");
 }
 
 export function normalizeEvidenceForScoring(caseItem) {
   const required = getRequired(caseItem.dispute_type);
   const fileKeys = Object.keys(caseItem.evidence_files || {});
+  const persistedKeys = Object.keys(caseItem.persisted_evidence || {});
   const available = [...new Set([
     ...required.filter((key) => hasEvidence(caseItem, key)),
     ...fileKeys.filter((key) => hasEvidence(caseItem, key)),
+    ...persistedKeys.filter((key) => hasEvidence(caseItem, key)),
   ])];
   return {
     ...caseItem,

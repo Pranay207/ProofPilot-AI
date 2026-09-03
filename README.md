@@ -118,7 +118,7 @@ Every case transition is cryptographically audited and blocked from external Raz
 
 ###  4. SLA Deadline Alerts & Risk Evaluation System
 - **Implementation:** [`server/services/metricsService.js`](file:///server/services/metricsService.js), [`src/lib/mlRiskModel.js`](file:///src/lib/mlRiskModel.js), [`scripts/train-risk-model.js`](file:///scripts/train-risk-model.js)
-- **Mechanism:** Evaluates disputes using an 8-feature loss risk regression model ($F_1 = 0.898$, Recall $= 95.7\%$, Precision $= 84.7\%$).
+- **Mechanism:** Evaluates disputes using an 8-feature loss risk regression model ($F_1 = 0.898$, Recall $= 95.7\%$, Precision $= 84.7\%$). These figures are evaluated on a synthetic held-out split and would need re-validation on real production data.
 - **Calculated Backend Metrics:** Calculates `money_at_risk`, `recoverable_value`, `net_merchant_benefit`, and `false_positive_review_cost` server-side with zero client-side calculation drift.
 
 ---
@@ -232,7 +232,13 @@ npm test
 
 ## 7. Architecture Pattern: Propose–Verify–Approve (PVA)
 
+<<<<<<< Updated upstream
 ProofPilot enforces strict separation between **AI advisory assistance** and **deterministic financial execution** via a Propose–Verify–Approve architecture:
+=======
+ProofPilot treats AI/human separation as a deliberate architecture pattern: the LLM proposes only (intent, missing-proof cues, and a draft narrative), a deterministic policy engine scores readiness and recommended action, and a human must approve before anything execution-capable runs. Nothing unsupervised submits disputes, issues refunds, or mutates ledgers.
+
+ProofPilot enforces strict separation between **AI advisory assistance** and **deterministic financial execution**:
+>>>>>>> Stashed changes
 
 ```bash
 # ✅ PROPOSE (AI Advisory Layer)

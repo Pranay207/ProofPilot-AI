@@ -11,7 +11,8 @@ import { buildAiJudgment } from "../src/lib/aiJudgment.js";
 import { buildWorkflowSnapshot, deriveCaseState, FAILURE_STATES } from "../src/lib/workflow.js";
 import { buildEvaluationResponse, buildMetricsResponse } from "./services/metricsService.js";
 import { buildDisputePacketPdf } from "./services/pdfExportService.js";
-import { validateDecisionStatus, ensureContestHasEvidence } from "./services/decisionService.js";
+import { validateDecisionStatus, ensureContestHasEvidence, ensureReadinessThreshold } from "./services/decisionService.js";
+import { applyPersistedEvidenceToCase, persistConnectorEvidence } from "./services/evidencePersistenceService.js";
 import { scoreAndClassifyCase } from "./services/riskScoringService.js";
 import { registerArchitectureRoutes } from "./routes/architecture.js";
 import {
@@ -298,6 +299,17 @@ function toFrontendCase(row) {
     return files;
   }, {});
   const fileBackedEvidence = new Set(Object.keys(evidenceFiles));
+  const persistedEvidence = evidence.reduce((records, item) => {
+    const attachedAt = item.attachedAt?.toISOString?.() || item.attachedAt;
+    if (item.status === "available" && attachedAt) {
+      records[item.key] = {
+        attached_at: attachedAt,
+        status: item.status,
+        source: item.fileName ? "upload" : "connector",
+      };
+    }
+    return records;
+  }, {});
   const requiredEvidence = getRequired(row.disputeType);
   const item = {
     id: row.caseId,
@@ -328,9 +340,10 @@ function toFrontendCase(row) {
     confidence_score: row.confidenceScore,
     customer_message: cleanText(row.customerMessage),
     case_summary: cleanText(row.caseSummary),
-    available_evidence: evidence.filter((item) => item.status === "available" && fileBackedEvidence.has(item.key)).map((item) => item.key),
-    missing_evidence: requiredEvidence.filter((key) => !fileBackedEvidence.has(key)),
+    available_evidence: evidence.filter((item) => item.status === "available" && (fileBackedEvidence.has(item.key) || persistedEvidence[item.key])).map((item) => item.key),
+    missing_evidence: requiredEvidence.filter((key) => !fileBackedEvidence.has(key) && !persistedEvidence[key]),
     evidence_files: evidenceFiles,
+    persisted_evidence: persistedEvidence,
     timeline_events: (row.timelineEvents || [])
       .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
       .map((item) => ({ event: cleanText(item.event), timestamp: item.timestamp, status: item.status, detail: cleanText(item.detail) })),
@@ -1742,9 +1755,20 @@ app.patch("/api/cases/:id/decision", async (req, res, next) => {
 app.post("/api/cases/:id/submit", async (req, res, next) => {
   try {
     const db = await getPrisma();
+    let caseItem;
+    let caseRow = null;
+    if (db) {
+      caseRow = await getCaseByParam(db, req.params.id, req.merchant.id);
+      if (!caseRow) return res.status(404).json({ error: "Case not found" });
+      caseItem = toFrontendCase(caseRow);
+    } else {
+      caseItem = localCases.find((item) => item.id === req.params.id || item.case_id === req.params.id);
+      if (!caseItem) return res.status(404).json({ error: "Case not found" });
+    }
+
+    ensureReadinessThreshold(caseItem);
+
     if (!db) return res.status(503).json({ error: "Razorpay submission requires PostgreSQL mode" });
-    const caseRow = await getCaseByParam(db, req.params.id, req.merchant.id);
-    if (!caseRow) return res.status(404).json({ error: "Case not found" });
     if (caseRow.packetStatus !== "approved") {
       return res.status(409).json({ error: "A packet must be approved before external submission" });
     }
@@ -1863,45 +1887,65 @@ app.post("/api/cases/:id/auto-collect-evidence", rateLimit({ max: 20 }), async (
     }
 
     const result = await autoCollectEvidence(caseItem);
+    const autoItems = (result.all_evidence || []).filter((item) => item.auto_available && item.evidence_key);
+    const persistOne = db
+      ? async (item) => {
+          const row = await getCaseByParam(db, req.params.id, req.merchant?.id);
+          const attachedAt = new Date();
+          await db.evidenceItem.upsert({
+            where: { caseId_key: { caseId: row.id, key: item.evidence_key } },
+            update: { status: "available", attachedAt },
+            create: {
+              caseId: row.id,
+              key: item.evidence_key,
+              label: EVIDENCE_LABELS[item.evidence_key] || item.evidence_key,
+              status: "available",
+              attachedAt,
+            },
+          });
+          return { attached_at: attachedAt.toISOString(), source: item.source || "connector" };
+        }
+      : async (item) => ({ attached_at: new Date().toISOString(), source: item.source || "connector" });
 
-    // Auto-mark evidence keys as available when connector confirms it
-    const autoKeys = result.auto_available_evidence || [];
-    if (autoKeys.length && db) {
+    const { persisted, failed } = await persistConnectorEvidence({
+      items: autoItems,
+      persistOne,
+    });
+    result.persisted_evidence = persisted.map((item) => item.evidence_key);
+    result.persist_failures = failed;
+
+    if (persisted.length && db) {
       const row = await getCaseByParam(db, req.params.id, req.merchant?.id);
-      for (const key of autoKeys) {
-        const evidenceData = result.all_evidence.find((e) => e.evidence_key === key && e.auto_available);
-        await db.evidenceItem.upsert({
-          where: { caseId_key: { caseId: row.id, key } },
-          update: { status: "available", attachedAt: new Date() },
-          create: {
-            caseId: row.id,
-            key,
-            label: EVIDENCE_LABELS[key] || key,
-            status: "available",
-            attachedAt: new Date(),
-          },
-        });
-      }
+      const mapped = toFrontendCase(row);
+      const scores = scoreCase(mapped);
+      await db.case.update({
+        where: { id: row.id },
+        data: {
+          riskScore: scores.risk_score,
+          readinessScore: scores.readiness_score,
+          confidenceScore: scores.confidence_score,
+          recommendedAction: scores.recommended_action,
+          actionReason: scores.action_reason,
+        },
+      });
       await db.auditLog.create({
         data: {
           caseId: row.id,
           actor: "Evidence Connector",
           action: "auto_collected",
-          detail: `Auto-collected evidence: ${autoKeys.join(", ") || "none"}. Connectors run: ${result.connectors_run}.`,
+          detail: `Persisted connector evidence: ${persisted.map((item) => item.evidence_key).join(", ")}.`,
         },
       });
-    } else if (autoKeys.length && !db) {
+    } else if (persisted.length && !db) {
       localCases = localCases.map((item) => {
         if (item.id !== req.params.id && item.case_id !== req.params.id) return item;
-        const available = [...new Set([...(item.available_evidence || []), ...autoKeys])];
-        const missing = (item.missing_evidence || []).filter((k) => !autoKeys.includes(k));
-        const updated = { ...item, available_evidence: available, missing_evidence: missing };
+        const updated = applyPersistedEvidenceToCase(item, persisted);
         const scores = scoreCase(updated);
         return addAudit(
           { ...updated, ...scores },
           "Evidence Connector",
           "auto_collected",
-          `Auto-collected: ${autoKeys.join(", ")}`,
+          `Persisted connector evidence: ${persisted.map((entry) => entry.evidence_key).join(", ")}`,
         );
       });
     }
