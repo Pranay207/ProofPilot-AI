@@ -162,9 +162,9 @@ export function normalizeTrackingResponse(payload, fallbackAwb = "", fallbackOrd
     ? trackingData.shipment_track[0]
     : trackingData?.shipment_track || {};
 
-  const currentStatus = String(shipmentTrack.current_status || trackingData?.track_status || "").toUpperCase();
+  const currentStatus = String(shipmentTrack.current_status || trackingData?.current_status || trackingData?.shipment_status || trackingData?.track_status || "").toUpperCase();
   const courierName = shipmentTrack.courier_name || trackingData?.courier_name || "Shiprocket Courier Partner";
-  const awbCode = shipmentTrack.awb_code || trackingData?.awb_code || fallbackAwb || "";
+  const awbCode = shipmentTrack.awb_code || trackingData?.awb_code || trackingData?.awb || fallbackAwb || "";
   const orderId = shipmentTrack.order_id || trackingData?.order_id || fallbackOrderId || "";
   const deliveredDate = shipmentTrack.delivered_date || shipmentTrack.delivered_to_date || shipmentTrack.delivery_date || null;
   const podUrl = shipmentTrack.pod || shipmentTrack.pod_url || trackingData?.pod || null;

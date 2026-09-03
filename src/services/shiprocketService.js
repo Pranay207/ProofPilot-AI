@@ -174,6 +174,39 @@ export async function fetchShiprocketTracking(awbCode) {
 }
 
 /**
+ * Mock function to return dummy Shiprocket tracking data for testing.
+ */
+export async function fetchMockShiprocketTracking(awbCode) {
+  const dummyPayload = { 
+    "awb": awbCode || 59629792084, 
+    "current_status": "Delivered", 
+    "order_id": "13905312", 
+    "current_timestamp": "2021-07-02 16:41:59", 
+    "etd": "2021-07-02 16:41:59", 
+    "current_status_id": 7, 
+    "shipment_status": "Delivered", 
+    "shipment_status_id": 7, 
+    "channel_order_id": "enter your channel order id", 
+    "channel": "enter your channel name", 
+    "courier_name": "enter courier_name", 
+    "scans": [ 
+      { "date": "2019-06-25 12:08:00", "activity": "SHIPMENT DELIVERED", "location": "PATIALA" }, 
+      { "date": "2019-06-25 12:06:00", "activity": "NECESSARY CHARGES PENDING FROM CONSIGNEE", "location": "PATIALA" }, 
+      { "date": "2019-06-25 10:18:00", "activity": "SHIPMENT OUT FOR DELIVERY", "location": "PATIALA" }, 
+      { "date": "2019-06-25 09:40:00", "activity": "SHIPMENT ARRIVED", "location": "PATIALA" }, 
+      { "date": "2019-06-25 07:32:00", "activity": "SHIPMENT FURTHER CONNECTED", "location": "AMBALA AIR HUB" }, 
+      { "date": "2019-06-25 07:03:00", "activity": "SHIPMENT ARRIVED AT HUB", "location": "AMBALA AIR HUB" }, 
+      { "date": "2019-06-25 00:45:00", "activity": "SHIPMENT FURTHER CONNECTED", "location": "KAPASHERA HUB" }, 
+      { "date": "2019-06-25 00:20:00", "activity": "SHIPMENT ARRIVED AT HUB", "location": "KAPASHERA HUB" }, 
+      { "date": "2019-06-24 23:17:00", "activity": "SHIPMENT FURTHER CONNECTED", "location": "COD PROCESSING CENTRE I" }, 
+      { "date": "2019-06-24 21:14:00", "activity": "SHIPMENT ARRIVED", "location": "COD PROCESSING CENTRE I" }, 
+      { "date": "2019-06-24 18:56:00", "activity": "SHIPMENT PICKED UP", "location": "COD PROCESSING CENTRE I" } 
+    ] 
+  };
+  return normalizeShiprocketData(dummyPayload, awbCode);
+}
+
+/**
  * Normalizes raw Shiprocket API payload into structured ProofPilot delivery proof data.
  */
 export function normalizeShiprocketData(payload, fallbackAwb = "") {
@@ -191,7 +224,7 @@ export function normalizeShiprocketData(payload, fallbackAwb = "") {
 
   const isDelivered = currentStatus === "DELIVERED" || String(trackingData?.track_status) === "1";
   const courierName = shipmentTrack.courier_name || trackingData?.courier_name || "Courier Partner";
-  const awbCode = shipmentTrack.awb_code || trackingData?.awb_code || fallbackAwb;
+  const awbCode = shipmentTrack.awb_code || trackingData?.awb_code || trackingData?.awb || fallbackAwb;
   const deliveredDate = shipmentTrack.delivered_date || null;
   const deliveredTo = shipmentTrack.delivered_to || null;
   const podUrl = shipmentTrack.pod || trackingData?.pod || trackingData?.pod_url || null;
