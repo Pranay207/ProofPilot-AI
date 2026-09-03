@@ -189,11 +189,11 @@ export default function MetricsDashboard({ cases = [], metrics: backendMetrics }
               </span>
               <AnimatedValue value={formatMoney(metrics.reviewCost)} className="text-lg font-semibold text-amber-700 tabular-nums" />
             </div>
-            <div className="flex items-center justify-between gap-4 rounded-md bg-slate-900 p-3">
-              <span className="inline-flex items-center gap-2 text-sm text-white">
+            <div className={`flex items-center justify-between gap-4 rounded-md p-3 border transition-colors ${Number(metrics.netBenefit || 0) <= 0 ? "bg-amber-50 text-amber-800 border-amber-200" : "bg-emerald-50 text-emerald-800 border-emerald-200"}`}>
+              <span className="inline-flex items-center gap-2 text-sm font-semibold">
                 <TrendingUp className="w-4 h-4" /> Net benefit
               </span>
-              <AnimatedValue value={formatMoney(metrics.netBenefit)} className="text-lg font-semibold text-white tabular-nums" />
+              <AnimatedValue value={formatMoney(metrics.netBenefit)} className="text-lg font-bold tabular-nums text-current" />
             </div>
           </div>
           <p className="mt-3 text-[11px] text-slate-400">

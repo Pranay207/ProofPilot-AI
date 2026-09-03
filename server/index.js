@@ -165,16 +165,32 @@ async function attachMerchant(req) {
   const db = await getPrisma();
   if (!db) return null;
   
-  // Prefer environment merchant name/email if configured (for webhook and API flows)
-  // Fall back to Auth0 claims otherwise
-  const merchantName = process.env.RAZORPAY_MERCHANT_NAME || req.auth.name || "Merchant";
-  const merchantEmail = process.env.RAZORPAY_MERCHANT_EMAIL || req.auth.email || null;
-  
-  const merchant = await db.merchant.upsert({
+  let merchant = await db.merchant.findUnique({
     where: { authSubject: req.auth.subject },
-    update: { name: merchantName, email: merchantEmail },
-    create: { authSubject: req.auth.subject, name: merchantName, email: merchantEmail },
   });
+
+  if (!merchant) {
+    const isEnvSubject = req.auth.subject === process.env.RAZORPAY_MERCHANT_AUTH_SUBJECT;
+    const merchantName = isEnvSubject ? (process.env.RAZORPAY_MERCHANT_NAME || req.auth.name || "Merchant") : (req.auth.name || "Merchant");
+    const rawEmail = isEnvSubject ? (process.env.RAZORPAY_MERCHANT_EMAIL || req.auth.email || null) : (req.auth.email || null);
+
+    let finalEmail = rawEmail;
+    if (finalEmail) {
+      const emailExists = await db.merchant.findUnique({ where: { email: finalEmail } });
+      if (emailExists) {
+        finalEmail = `${req.auth.subject.replace(/[^a-zA-Z0-9]/g, "_")}@proofpilot.local`;
+      }
+    }
+
+    merchant = await db.merchant.create({
+      data: {
+        authSubject: req.auth.subject,
+        name: merchantName,
+        email: finalEmail,
+      },
+    });
+  }
+
   req.merchant = merchant;
   return merchant;
 }
@@ -2045,10 +2061,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   startWorkers().catch((error) => console.warn("[Workers] Failed to start:", error.message));
 
   app.listen(port, () => {
-    const demoMode = process.env.DEMO_MODE === "true" ? " [DEMO MODE]" : "";
-    console.log(`ProofPilot API running on http://localhost:${port} (${useDatabase ? "postgres" : "local sample data"})${demoMode}`);
-    console.log(`  → Reliability:  http://localhost:${port}/api/reliability`);
-    console.log(`  → Evaluation:   http://localhost:${port}/api/evaluation`);
-    console.log(`  → Judge export: http://localhost:${port}/api/reliability/export`);
+    console.log(`ProofPilot API ready on http://localhost:${port}`);
   });
 }

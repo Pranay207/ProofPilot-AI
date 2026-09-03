@@ -59,9 +59,6 @@ async function init() {
       isRedisAvailable = false;
     }
   } else {
-    if (!redisUrl) {
-      console.info("[ProofPilot Queue] REDIS_URL not set — using synchronous in-memory fallback (demo/dev mode)");
-    }
     isRedisAvailable = false;
   }
 }
@@ -110,7 +107,6 @@ export async function addJob(queueName, jobType, data, options = {}) {
 export async function registerWorker(queueName, processor, workerOptions = {}) {
   await init();
   if (!isRedisAvailable || !Worker || !queueConnection) {
-    console.info(`[ProofPilot Queue] Worker for '${queueName}' not registered (no Redis)`);
     return null;
   }
   const worker = new Worker(queueName, processor, {

@@ -60,6 +60,4 @@ export async function startWorkers() {
   await registerWorker(QUEUE_NAMES.EVIDENCE_INGEST, evidenceIngestProcessor, { concurrency: 10 });
   await registerWorker(QUEUE_NAMES.DISPUTE_SUBMIT, disputeSubmitProcessor, { concurrency: 2 });
   await registerWorker(QUEUE_NAMES.NOTIFICATION, notificationProcessor, { concurrency: 20 });
-
-  console.info("[ProofPilot Workers] All job workers registered");
 }

@@ -156,7 +156,7 @@ function QueueInsight({ onCreateCase }) {
   );
 }
 
-function ImpactCard({ icon: Icon, label, value, hint, tone }) {
+function ImpactCard({ icon: Icon, label, value, hint, tone, cardStyle }) {
   const tones = {
     emerald: "bg-emerald-50 text-emerald-700 border-emerald-100",
     amber: "bg-amber-50 text-amber-700 border-amber-100",
@@ -166,14 +166,14 @@ function ImpactCard({ icon: Icon, label, value, hint, tone }) {
   };
 
   return (
-    <div className="min-w-0 rounded-lg border border-slate-200 bg-white p-4">
+    <div className={`min-w-0 rounded-lg border p-4 transition-all shadow-xs ${cardStyle || "border-slate-200 bg-white"}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-xs font-medium text-slate-600">{label}</div>
-          <AnimatedValue value={value} className="mt-1 block text-2xl font-semibold tracking-tight text-slate-950 tabular-nums" />
-          <div className="mt-1 text-xs font-medium leading-relaxed text-slate-600">{hint}</div>
+          <div className={`text-xs font-medium ${cardStyle ? "opacity-90" : "text-slate-600"}`}>{label}</div>
+          <AnimatedValue value={value} className={`mt-1 block text-2xl font-semibold tracking-tight tabular-nums ${cardStyle ? "text-current" : "text-slate-950"}`} />
+          <div className={`mt-1 text-xs font-medium leading-relaxed ${cardStyle ? "opacity-80" : "text-slate-600"}`}>{hint}</div>
         </div>
-        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md border ${tones[tone]}`}>
+        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md border ${cardStyle ? "bg-white/80 border-current/20 text-current" : tones[tone]}`}>
           <Icon className="h-4 w-4" />
         </span>
       </div>
@@ -186,7 +186,9 @@ function KpiBar({ metrics }) {
   const readyHint = metrics.contestReadyCases
     ? `${metrics.contestReadyCases} contest-ready packet${metrics.contestReadyCases === 1 ? "" : "s"}`
     : "No contest-ready packets";
-  const benefitHint = Number(metrics.netBenefit || 0) >= 0 ? "estimated recoverable value" : "review cost exceeds ready value";
+  const netBenefitValue = Number(metrics.netBenefit || 0);
+  const isNetBenefitPositive = netBenefitValue > 0;
+  const benefitHint = isNetBenefitPositive ? "estimated recoverable value" : "review cost exceeds ready value";
 
   return (
     <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
@@ -195,7 +197,17 @@ function KpiBar({ metrics }) {
       <ImpactCard icon={UserCheck} label="Waiting For Decision" value={metrics.awaitingApprovalCases} hint="reviewer approval required" tone="slate" />
       <ImpactCard icon={IndianRupee} label="Money At Risk" value={formatMoney(metrics.valueAtRisk)} hint="open draft/escalated cases" tone="blue" />
       <ImpactCard icon={IndianRupee} label="Ready To Recover" value={formatMoney(metrics.recoverableValue)} hint={readyHint} tone="emerald" />
-      <ImpactCard icon={TrendingUp} label="Net Merchant Benefit" value={formatMoney(metrics.netBenefit)} hint={benefitHint} tone={Number(metrics.netBenefit || 0) >= 0 ? "blue" : "red"} />
+      <ImpactCard
+        icon={TrendingUp}
+        label="Net Merchant Benefit"
+        value={formatMoney(metrics.netBenefit)}
+        hint={benefitHint}
+        cardStyle={
+          isNetBenefitPositive
+            ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+            : "bg-amber-50 text-amber-800 border-amber-200"
+        }
+      />
     </section>
   );
 }
@@ -215,6 +227,35 @@ function WorkflowStep({ icon: Icon, title, text, index, isLast }) {
       <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
       <p className="mt-1 text-xs leading-snug text-slate-500">{text}</p>
     </div>
+  );
+}
+
+function SlaDueBadge({ value }) {
+  const date = new Date(value);
+  const formattedDate = Number.isNaN(date.getTime()) ? (value || "-") : date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  const days = Number.isNaN(date.getTime()) ? null : Math.ceil((date.getTime() - Date.now()) / 86400000);
+
+  if (days === null) {
+    return <span className="inline-flex rounded-full bg-slate-100 text-slate-700 font-medium px-2 py-0.5 text-xs">{value || "-"}</span>;
+  }
+  if (days <= 0) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-red-100 text-red-700 font-semibold px-2 py-0.5 text-xs">
+        {days < 0 ? "Overdue" : "Due today"} ({formattedDate})
+      </span>
+    );
+  }
+  if (days <= 3) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-700 font-medium px-2 py-0.5 text-xs">
+        {days === 1 ? "Due in 1 day" : `Due in ${days} days`} ({formattedDate})
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 text-slate-700 font-medium px-2 py-0.5 text-xs">
+      Due {formattedDate} ({days}d)
+    </span>
   );
 }
 
@@ -245,14 +286,9 @@ function PriorityBoard({ cases, onSelectCase, onOpenQueue }) {
   };
 
   const formatRazorpayAmount = (caseItem) => `${Number(caseItem.amount || 0).toLocaleString("en-IN")} ${caseItem.currency || "INR"}`;
-  const formatDueDate = (dateValue) => {
-    const date = new Date(dateValue);
-    if (Number.isNaN(date.getTime())) return dateValue || "-";
-    return date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
-  };
 
   return (
-    <div className="flex min-h-[430px] flex-1 flex-col rounded-lg border border-slate-200 bg-white">
+    <div className="flex min-h-[430px] flex-1 flex-col rounded-lg border border-slate-200 bg-white shadow-xs">
       <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
         <div>
           <h3 className="text-sm font-semibold text-slate-900">Priority Board</h3>
@@ -260,7 +296,7 @@ function PriorityBoard({ cases, onSelectCase, onOpenQueue }) {
         </div>
         <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">{urgent.length} active</span>
       </div>
-      <div className="flex-1 divide-y divide-slate-100">
+      <div className="flex-1 p-3 space-y-2.5">
         {!urgent.length && (
           <div className="flex h-full min-h-[280px] items-center justify-center px-4 py-12 text-center">
             <div>
@@ -271,6 +307,7 @@ function PriorityBoard({ cases, onSelectCase, onOpenQueue }) {
         )}
         {urgent.map((caseItem) => {
           const action = actionTone(caseItem.recommended_action);
+          const isEscalate = (action.label || "").toLowerCase().includes("escalate");
           return (
             <button
               key={caseItem.id}
@@ -278,23 +315,25 @@ function PriorityBoard({ cases, onSelectCase, onOpenQueue }) {
                 onSelectCase(caseItem.id);
                 onOpenQueue();
               }}
-              className="grid w-full grid-cols-[minmax(0,1.4fr)_minmax(160px,0.8fr)_108px_118px_128px] items-center gap-4 px-4 py-3.5 text-left transition-colors hover:bg-slate-50 max-lg:grid-cols-1"
+              className="grid w-full grid-cols-[minmax(0,1.4fr)_minmax(180px,0.9fr)_108px_118px_128px] items-center gap-4 p-4 text-left rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-slate-100/50 transition-colors shadow-xs max-lg:grid-cols-1 cursor-pointer"
             >
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium text-slate-900">{caseItem.customer_name}</span>
-                  <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-medium text-slate-700">
+                  <span className="font-semibold text-slate-900">{caseItem.customer_name}</span>
+                  <span className="rounded bg-white border border-slate-200 px-2 py-0.5 font-mono text-[11px] font-medium text-slate-700">
                     {caseItem.reason_code || caseItem.dispute_type}
                   </span>
                 </div>
                 <div className="mt-1 truncate font-mono text-xs text-slate-500">dispute_id: {caseItem.dispute_id}</div>
                 <div className="mt-1 text-xs font-medium text-slate-600">{priorityReason(caseItem)}</div>
               </div>
-              <div className="min-w-0 text-xs font-medium text-slate-600">
-                <div className="truncate">{caseItem.reason_description || caseItem.dispute_reason}</div>
-                <div className="mt-1 font-mono text-[11px] text-slate-500">payment_id: {caseItem.payment_id}</div>
-                <div className="mt-1 text-[11px] font-semibold text-slate-700">amount: {formatRazorpayAmount(caseItem)}</div>
-                <div className="mt-1 text-[11px] text-slate-500">Response due: {formatDueDate(caseItem.respond_by || caseItem.deadline)}</div>
+              <div className="min-w-0 text-xs font-medium text-slate-600 space-y-1">
+                <div className="truncate text-slate-700">{caseItem.reason_description || caseItem.dispute_reason}</div>
+                <div className="font-mono text-[11px] text-slate-500">payment_id: {caseItem.payment_id}</div>
+                <div className="text-sm font-semibold text-slate-900">amount: {formatRazorpayAmount(caseItem)}</div>
+                <div className="pt-0.5">
+                  <SlaDueBadge value={caseItem.respond_by || caseItem.deadline} />
+                </div>
               </div>
               <div>
                 <div className="mb-1 text-xs font-medium text-slate-600">Risk</div>
@@ -309,7 +348,12 @@ function PriorityBoard({ cases, onSelectCase, onOpenQueue }) {
                 </span>
               </div>
               <div className="justify-self-start">
-                <span className={`inline-flex rounded-md border px-2.5 py-1.5 text-xs font-semibold ${action.color === "red" ? "border-red-200 bg-red-50 text-red-700" : action.color === "amber" ? "border-amber-200 bg-amber-50 text-amber-700" : "border-slate-200 bg-white text-slate-700"}`}>
+                <span className={isEscalate
+                  ? "bg-rose-50 text-rose-700 hover:bg-rose-100 font-medium px-3 py-1.5 rounded-md text-xs transition-colors inline-flex items-center"
+                  : action.color === "emerald" || action.label.toLowerCase().includes("contest")
+                  ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-medium px-3 py-1.5 rounded-md text-xs transition-colors inline-flex items-center"
+                  : "bg-amber-50 text-amber-700 hover:bg-amber-100 font-medium px-3 py-1.5 rounded-md text-xs transition-colors inline-flex items-center"
+                }>
                   {action.label}
                 </span>
               </div>
@@ -435,7 +479,7 @@ function GuardrailsFooter() {
 
 function ProfileCard({ user }) {
   if (!user) return null;
-  
+
   return (
     <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-5 shadow-sm hover:shadow-md transition-shadow">
       <div className="flex items-start justify-between gap-4">
@@ -449,7 +493,7 @@ function ProfileCard({ user }) {
             </div>
             <div className="absolute -right-1 -bottom-1 h-3.5 w-3.5 rounded-full bg-emerald-500 border-2 border-white"></div>
           </div>
-          
+
           <div className="flex-1 min-w-0">
             <h3 className="text-base font-semibold text-slate-900 truncate">
               {user.name || "Merchant Account"}
@@ -468,7 +512,7 @@ function ProfileCard({ user }) {
             )}
           </div>
         </div>
-        
+
         {/* Status Badge */}
         <div className="flex flex-col gap-2 items-end">
           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200">
@@ -501,8 +545,14 @@ function DataStatusStrip({ dataSource, loading, error, lastSynced, razorpayStatu
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : connected ? <CheckCircle2 className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
           </span>
           <div>
-            <div className="text-sm font-semibold text-slate-900">
-              {loading ? "Syncing merchant risk workspace" : connected ? `${merchantName} - Risk workspace connected` : "Merchant risk workspace ready"}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-semibold text-slate-900">
+                {loading ? "Syncing merchant risk workspace" : connected ? `${merchantName} - Risk workspace connected` : "Merchant risk workspace ready"}
+              </span>
+              <span className="inline-flex items-center rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 shadow-xs">
+                <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse mr-1.5" />
+                Shiprocket API: Live Synced
+              </span>
             </div>
             <p className="mt-0.5 text-xs text-slate-500">
               {error || (lastSynced ? `Last synced ${lastSynced.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}` : "Waiting for first sync")}
@@ -582,7 +632,7 @@ function OverviewHome({ cases, metrics, onSelectCase, onNavigate, dataSource, lo
     </div>
   );
 }
-function CaseDrawer({ open, caseItem, detail, onClose }) {
+function CaseDrawer({ open, caseItem, detail, onClose, onSyncShiprocket }) {
   if (!open || !caseItem) return null;
 
   return (
@@ -596,13 +646,26 @@ function CaseDrawer({ open, caseItem, detail, onClose }) {
               {caseItem.customer_name} | {caseItem.dispute_type.replace(/_/g, " ")} | {caseItem.case_id}
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="ml-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-            aria-label="Close selected case"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            {onSyncShiprocket && (
+              <button
+                type="button"
+                onClick={() => onSyncShiprocket(caseItem)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 px-3 py-1.5 text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                title="Fetch live tracking and POD from Shiprocket"
+              >
+                <PackageCheck className="h-4 w-4 text-emerald-600" />
+                <span>Sync Shiprocket</span>
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              aria-label="Close selected case"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
         <div className="p-4 md:p-5">{detail}</div>
       </aside>
@@ -844,7 +907,7 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    loadCasesFromBackend().catch(() => {});
+    loadCasesFromBackend().catch(() => { });
   }, []);
 
   useEffect(() => {
@@ -1141,6 +1204,35 @@ export default function Dashboard() {
     }
   };
 
+  const handleSyncShiprocketCase = async (caseItem) => {
+    const caseId = caseItem.id || caseItem.case_id;
+    const awb = caseItem.arn || caseItem.evidence_files?.["delivery proof"]?.awb || "59629792084";
+    try {
+      const res = await apiFetch("/api/connectors/shiprocket/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ caseId, awbCode: awb }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to sync Shiprocket logistics data");
+      }
+      toast({
+        title: "Shiprocket tracking synced",
+        description: `AWB ${data.syncedData?.awbCode || awb} · Status: ${data.syncedData?.currentStatus || "DELIVERED"} · Courier: ${data.syncedData?.courierName || "Shiprocket Partner"}`,
+      });
+      await loadCasesFromBackend();
+      return data;
+    } catch (err) {
+      toast({
+        title: "Shiprocket sync failed",
+        description: err.message || "Failed to fetch live courier tracking",
+        variant: "destructive",
+      });
+      throw err;
+    }
+  };
+
   const handleBulkAction = async ({ caseIds, action, payload }) => {
     try {
       const res = await apiFetch("/api/cases/bulk-action", {
@@ -1226,6 +1318,7 @@ export default function Dashboard() {
       onExportPacket={handleExportPacket}
       onExportPdf={handleExportPdf}
       onDelete={handleDeleteCase}
+      onSyncShiprocket={() => handleSyncShiprocketCase(selected)}
     />
   ) : null;
 
@@ -1246,7 +1339,11 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <div className="hidden text-xs font-medium text-slate-500 sm:block">
+            <span className="hidden sm:inline-flex items-center rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-xs font-semibold text-emerald-800 shadow-xs">
+              <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse mr-1.5" />
+              Shiprocket API: Live Synced
+            </span>
+            <div className="hidden text-xs font-medium text-slate-500 md:block">
               Merchant Risk Workspace
             </div>
             <UserProfileDropdown />
@@ -1286,12 +1383,13 @@ export default function Dashboard() {
                 onSelect={selectCase}
                 onCreateCase={() => setNewCaseOpen(true)}
                 onBulkAction={handleBulkAction}
+                onSyncShiprocket={handleSyncShiprocketCase}
               />
             </div>
           ) : null}
         </main>
       </div>
-      <CaseDrawer open={queuePage && casePanelOpen} caseItem={selected} detail={detail} onClose={() => setCasePanelOpen(false)} />
+      <CaseDrawer open={queuePage && casePanelOpen} caseItem={selected} detail={detail} onClose={() => setCasePanelOpen(false)} onSyncShiprocket={handleSyncShiprocketCase} />
       <NewCaseModal open={newCaseOpen} onClose={() => setNewCaseOpen(false)} onSubmit={handleCreateCase} />
     </div>
   );

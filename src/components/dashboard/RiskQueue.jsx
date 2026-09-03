@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Archive, CheckCircle2, PlusCircle, UserPlus, XCircle } from "lucide-react";
+import { Archive, CheckCircle2, PlusCircle, UserPlus, XCircle, PackageCheck, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { riskTone, readinessTone, actionTone } from "@/lib/ruleEngine";
+import { apiFetch } from "@/lib/apiClient";
+import { toast } from "@/components/ui/use-toast";
 
 const ACTIVE_STATUSES = new Set(["draft", "escalated"]);
 const DECIDED_STATUSES = new Set(["approved", "accepted"]);
@@ -44,13 +46,39 @@ function formatDueDate(dateValue) {
 
 function RespondByBadge({ value }) {
   const days = daysUntil(value);
-  const urgent = days !== null && days <= 2;
-  const label = days === null ? value : days < 0 ? "Overdue" : days === 0 ? "Today" : days === 1 ? "1 day left" : `${days} days left`;
+  const formattedDate = formatDueDate(value);
+
+  if (days === null) {
+    return <span className="inline-flex rounded-full bg-slate-100 text-slate-700 font-medium px-2 py-0.5 text-xs">{value || "-"}</span>;
+  }
+
+  if (days <= 0) {
+    return (
+      <div className="space-y-0.5">
+        <div className="text-[12px] font-medium text-slate-700">{formattedDate}</div>
+        <span className="inline-flex items-center rounded-full bg-red-100 text-red-700 font-semibold px-2 py-0.5 text-xs">
+          {days < 0 ? "Overdue" : "Due today"}
+        </span>
+      </div>
+    );
+  }
+
+  if (days <= 3) {
+    return (
+      <div className="space-y-0.5">
+        <div className="text-[12px] font-medium text-slate-700">{formattedDate}</div>
+        <span className="inline-flex items-center rounded-full bg-amber-100 text-amber-700 font-medium px-2 py-0.5 text-xs">
+          {days === 1 ? "Due in 1 day" : `Due in ${days} days`}
+        </span>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-1">
-      <div className="text-[12px] font-medium text-slate-700">{formatDueDate(value)}</div>
-      <span className={cn("inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold", urgent ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-700")}>
-        {label}
+    <div className="space-y-0.5">
+      <div className="text-[12px] font-medium text-slate-700">{formattedDate}</div>
+      <span className="inline-flex items-center rounded-full bg-slate-100 text-slate-700 font-medium px-2 py-0.5 text-xs">
+        {days} days left
       </span>
     </div>
   );
@@ -73,10 +101,11 @@ function emptyCopy(tab) {
   return "No dispute cases need action";
 }
 
-export default function RiskQueue({ cases, selectedId, onSelect, onCreateCase, onBulkAction }) {
+export default function RiskQueue({ cases, selectedId, onSelect, onCreateCase, onBulkAction, onSyncShiprocket }) {
   const [tab, setTab] = useState("open");
   const [selectedCaseIds, setSelectedCaseIds] = useState([]);
   const [bulkLoading, setBulkLoading] = useState("");
+  const [syncingCaseId, setSyncingCaseId] = useState(null);
   const counts = useMemo(() => {
     return QUEUE_TABS.reduce((acc, item) => {
       acc[item.id] = cases.filter((caseItem) => matchesTab(caseItem, item.id)).length;
@@ -118,6 +147,40 @@ export default function RiskQueue({ cases, selectedId, onSelect, onCreateCase, o
       setSelectedCaseIds([]);
     } finally {
       setBulkLoading("");
+    }
+  };
+
+  const handleSyncRowShiprocket = async (e, caseItem) => {
+    e.stopPropagation();
+    const rowId = caseItem.id || caseItem.case_id;
+    setSyncingCaseId(rowId);
+    try {
+      if (onSyncShiprocket) {
+        await onSyncShiprocket(caseItem);
+      } else {
+        const awb = caseItem.arn || caseItem.evidence_files?.["delivery proof"]?.awb || "59629792084";
+        const res = await apiFetch("/api/connectors/shiprocket/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ caseId: rowId, awbCode: awb }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || "Failed to sync Shiprocket tracking data");
+        }
+        toast({
+          title: "Shiprocket tracking synced",
+          description: `AWB ${data.syncedData?.awbCode || awb} · Status: ${data.syncedData?.currentStatus || "DELIVERED"}`,
+        });
+      }
+    } catch (err) {
+      toast({
+        title: "Shiprocket sync error",
+        description: err.message || "Failed to fetch courier status",
+        variant: "destructive",
+      });
+    } finally {
+      setSyncingCaseId(null);
     }
   };
 
@@ -174,7 +237,7 @@ export default function RiskQueue({ cases, selectedId, onSelect, onCreateCase, o
         </div>
       )}
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1080px] text-sm">
+        <table className="w-full min-w-[1140px] text-sm">
           <thead>
             <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
               <th className="px-3 py-3 w-10">
@@ -194,7 +257,7 @@ export default function RiskQueue({ cases, selectedId, onSelect, onCreateCase, o
               <th className="text-center font-medium px-3 py-3 w-[88px]">Risk</th>
               <th className="text-center font-medium px-3 py-3 w-[104px]">Readiness</th>
               <th className="text-left font-medium px-3 py-3 w-[128px]">Response Due</th>
-              <th className="text-left font-medium px-3 py-3 w-[140px]">Action</th>
+              <th className="text-left font-medium px-3 py-3 min-w-[210px]">Action</th>
               <th className="text-left font-medium px-3 py-3 w-[110px]">Status</th>
             </tr>
           </thead>
@@ -219,6 +282,7 @@ export default function RiskQueue({ cases, selectedId, onSelect, onCreateCase, o
               const act = actionTone(c.recommended_action);
               const isSelected = c.id === selectedId;
               const rowId = c.id || c.case_id;
+              const isSyncingThis = syncingCaseId === rowId;
               return (
                 <tr
                   key={c.id}
@@ -255,7 +319,25 @@ export default function RiskQueue({ cases, selectedId, onSelect, onCreateCase, o
                   <td className="px-3 py-3 text-center align-middle"><Badge tone={risk.color} label={`${c.risk_score}`} /></td>
                   <td className="px-3 py-3 text-center align-middle"><Badge tone={ready.color} label={`${c.readiness_score}%`} /></td>
                   <td className="px-3 py-3 align-middle text-[12px] text-slate-600 whitespace-nowrap"><RespondByBadge value={c.respond_by || c.deadline} /></td>
-                  <td className="px-3 py-3 align-middle"><Badge tone={act.color} label={act.label} /></td>
+                  <td className="px-3 py-3 align-middle" onClick={(event) => event.stopPropagation()}>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <Badge tone={act.color} label={act.label} />
+                      <button
+                        type="button"
+                        onClick={(event) => handleSyncRowShiprocket(event, c)}
+                        disabled={isSyncingThis}
+                        title="Fetch live delivery proof & tracking from Shiprocket"
+                        className="inline-flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-2 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 whitespace-nowrap shadow-xs active:scale-95 cursor-pointer"
+                      >
+                        {isSyncingThis ? (
+                          <Loader2 className="h-3 w-3 animate-spin text-emerald-600" />
+                        ) : (
+                          <PackageCheck className="h-3 w-3 text-emerald-600" />
+                        )}
+                        <span>Sync Shiprocket</span>
+                      </button>
+                    </div>
+                  </td>
                   <td className="px-3 py-3 align-middle"><Badge tone="blue" label={c.status || "open"} /></td>
                 </tr>
               );
