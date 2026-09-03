@@ -171,7 +171,7 @@ $$\text{Net Merchant Benefit} = \sum \text{Recovered Disputed Capital} - (\text{
 ├────────────────────────────┬───────────────────────────┤
 │ Metric                     │ Score                     │
 ├────────────────────────────┼───────────────────────────┤
-│ Model Accuracy             │ 89.2%                     │
+│ Model Accuracy             │ 82.3%                     │
 │ Precision                  │ 84.7%                     │
 │ Recall                     │ 95.7%                     │
 │ F1 Score                   │ 0.898                     │
