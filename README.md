@@ -20,7 +20,7 @@
 | 🎥 **5-Minute Video Walkthrough** | [Direct Walkthrough Link](https://drive.google.com/drive/u/0/folders/1jLkM1ABBKEesqdNAS1Q9v3vjmoG64DiF) | Permissions: Anyone with Link |
 | 📦 **GitHub Repository** | [github.com/Pranay207/ProofPilot-AI](https://github.com/Pranay207/ProofPilot-AI) | Public Source Repository |
 | 📊 **Judge Reliability Export (Live)** | [https://proofpilot-ai.onrender.com/api/reliability/export](https://proofpilot-ai.onrender.com/api/reliability/export) | Cloud Deployment Telemetry |
-| 📊 **Judge Reliability Export (Local)** | `GET http://localhost:4000/api/reliability/export` | Local Dev Instance Telemetry |
+| 📊 **Judge Reliability Export (Local)** | [http://localhost:4000/api/reliability/export](http://localhost:4000/api/reliability/export) | Clickable when running locally |
 | 🧪 **Regression Test Suite** | `npm test` | 22/22 Passing Guardrails |
 
 ---
