@@ -206,6 +206,23 @@ app.get("/api/health", (_req, res) => {
 
 // API middleware - authenticates requests and attaches merchant data
 app.use("/api", async (req, _res, next) => {
+  const url = req.originalUrl || req.url || "";
+  const isPublicRoute = 
+    url.startsWith("/api/reliability") ||
+    url.startsWith("/api/evaluation") ||
+    url.startsWith("/api/health") ||
+    url.startsWith("/api/webhooks");
+
+  if (isPublicRoute) {
+    try {
+      req.auth = await authenticateRequest(req);
+      await attachMerchant(req);
+    } catch {
+      // Graceful fallback for public evaluator endpoints
+    }
+    return next();
+  }
+
   try {
     req.auth = await authenticateRequest(req);
     await attachMerchant(req);
