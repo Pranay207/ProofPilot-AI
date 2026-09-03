@@ -232,13 +232,7 @@ npm test
 
 ## 7. Architecture Pattern: Propose–Verify–Approve (PVA)
 
-<<<<<<< Updated upstream
-ProofPilot enforces strict separation between **AI advisory assistance** and **deterministic financial execution** via a Propose–Verify–Approve architecture:
-=======
-ProofPilot treats AI/human separation as a deliberate architecture pattern: the LLM proposes only (intent, missing-proof cues, and a draft narrative), a deterministic policy engine scores readiness and recommended action, and a human must approve before anything execution-capable runs. Nothing unsupervised submits disputes, issues refunds, or mutates ledgers.
 
-ProofPilot enforces strict separation between **AI advisory assistance** and **deterministic financial execution**:
->>>>>>> Stashed changes
 
 ```bash
 # ✅ PROPOSE (AI Advisory Layer)
