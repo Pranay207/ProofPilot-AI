@@ -88,12 +88,12 @@ export function rateLimit(options = {}) {
  * Returns a normalized auth object: { subject, email, name, roles }.
  */
 export async function authenticateRequest(req) {
-  // DEMO_MODE: fixed demo merchant identity (no auth required)
+  // DEMO_MODE: use configured merchant or fixed demo merchant identity
   if (isDemoMode) {
     return {
-      subject: "demo-merchant-001",
-      email: "demo@proofpilot.ai",
-      name: "Demo Merchant",
+      subject: process.env.RAZORPAY_MERCHANT_AUTH_SUBJECT || "demo-merchant-001",
+      email: process.env.RAZORPAY_MERCHANT_EMAIL || "demo@proofpilot.ai",
+      name: process.env.RAZORPAY_MERCHANT_NAME || "Demo Merchant",
       roles: ["merchant", "reviewer"],
       mode: "demo",
     };

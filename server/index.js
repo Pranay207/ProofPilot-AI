@@ -382,10 +382,17 @@ function toFrontendCase(row) {
 }
 
 async function getCaseByParam(db, id, merchantId) {
-  return db.case.findFirst({
+  let found = await db.case.findFirst({
     where: { OR: [{ id }, { caseId: id }], ...(merchantId ? { merchantId } : {}) },
     include: { evidenceItems: true, timelineEvents: true, auditLogs: true },
   });
+  if (!found && process.env.DEMO_MODE === "true") {
+    found = await db.case.findFirst({
+      where: { OR: [{ id }, { caseId: id }] },
+      include: { evidenceItems: true, timelineEvents: true, auditLogs: true },
+    });
+  }
+  return found;
 }
 
 function addAudit(caseItem, actor, action, detail) {
@@ -1323,11 +1330,17 @@ app.get("/api/cases", async (req, res, next) => {
   try {
     const db = await getPrisma();
     if (!db) return res.json(attachWorkflow(localCases));
-    const rows = await db.case.findMany({
-      where: { merchantId: req.merchant.id },
+    let rows = await db.case.findMany({
+      where: req.merchant ? { merchantId: req.merchant.id } : {},
       orderBy: [{ riskScore: "desc" }, { createdAt: "desc" }],
       include: { evidenceItems: true, timelineEvents: true, auditLogs: true },
     });
+    if ((!rows || rows.length === 0) && process.env.DEMO_MODE === "true") {
+      rows = await db.case.findMany({
+        orderBy: [{ riskScore: "desc" }, { createdAt: "desc" }],
+        include: { evidenceItems: true, timelineEvents: true, auditLogs: true },
+      });
+    }
     res.json(rows.map(toFrontendCase));
   } catch (error) {
     next(error);
