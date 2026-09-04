@@ -44,7 +44,7 @@ const riskModelArtifact = {
       "f1": 0.9
     }
   },
-  "generated_at": "2026-09-04T05:46:40.834Z"
+  "generated_at": "2026-09-04T05:53:22.397Z"
 };
 
 export default riskModelArtifact;
