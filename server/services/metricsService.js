@@ -59,6 +59,7 @@ export function buildEvaluationResponse(cases = [], failureRecovery = []) {
         accuracy: validation.accuracy,
         holdout_rows: validation.holdout_rows,
         confusion,
+        baseline_naive: validation.baseline_naive || null,
         false_positive_review_cost_inr: Number(confusion.fp || 0) * REVIEW_COST_PER_CASE,
       },
     },

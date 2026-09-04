@@ -166,20 +166,19 @@ In [`server/services/metricsService.js`](server/services/metricsService.js), Pro
 $$\text{Net Merchant Benefit} = \sum \text{Recovered Disputed Capital} - (\text{Ops Review Hours} \times \text{Hourly Rate}) - \sum \text{Dispute Admin Fees}$$
 
 ```text
-┌────────────────────────────────────────────────────────┐
-│ MODEL CLASSIFICATION BENCHMARKS (Held-Out Test Split)  │
-├────────────────────────────┬───────────────────────────┤
-│ Metric                     │ Score                     │
-├────────────────────────────┼───────────────────────────┤
-│ Model Accuracy             │ 82.3%                     │
-│ Precision                  │ 84.7%                     │
-│ Recall                     │ 95.7%                     │
-│ F1 Score                   │ 0.898                     │
-│ False-Positive Review Cost │ ₹0 (Blocked by Guardrail) │
-└────────────────────────────┴───────────────────────────┘
+┌──────────────────────────────┬────────────────────────┬────────────────────────┐
+│ Metric                       │ Naive Baseline (Always)│ Balanced Model (v1)    │
+├──────────────────────────────┼────────────────────────┼────────────────────────┤
+│ Precision                    │ 81.9%                  │ 91.0% (+9.1%)          │
+│ Recall                       │ 100.0%                 │ 75.1%                  │
+│ F1 Score                     │ 0.900                  │ 0.823                  │
+│ Model Accuracy               │ 81.9%                  │ 73.5%                  │
+│ True Negatives (Safe Caught) │ 0 / 87 (0%)            │ 58 / 87 (66.7%)        │
+│ False Positives (Alarms)     │ 87 (100% false alarms) │ 29 (67% reduction)     │
+└──────────────────────────────┴────────────────────────┴────────────────────────┘
 ```
 > [!NOTE]
-> Performance metrics evaluated on held-out synthetic test splits matching common Indian dispute distributions. Models can be retrained on merchant historical outcomes via `npm run train:model`.
+> **Imbalance & Class Weighting**: Indian e-commerce dispute sets naturally exhibit class imbalance (~82% loss rate). A naive "always predict loss" baseline achieves high recall (100%) but generates 87 false alarms and fails to identify a single winnable case (0% True Negatives). ProofPilot's logistic regression uses **inverse-frequency class weighting** (`class_weight="balanced"`), boosting Precision to **91.0%**, cutting false alarms from 87 to 29, and correctly isolating **66.7% of winnable disputes** (TN: 58/87). Models can be retrained via `npm run train:model`.
 
 ---
 

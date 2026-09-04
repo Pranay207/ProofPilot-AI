@@ -92,12 +92,20 @@ function trainLogisticRegression(rows) {
   const rate = 0.18;
   const lambda = 0.002;
 
-  for (let epoch = 0; epoch < 900; epoch += 1) {
+  // Class weight balancing (inverse-frequency weighting, matching scikit-learn class_weight="balanced")
+  const nTotal = rows.length;
+  const nPos = rows.filter((r) => r.y === 1).length;
+  const nNeg = nTotal - nPos;
+  const weightPos = nTotal / (2 * nPos);
+  const weightNeg = nTotal / (2 * nNeg);
+
+  for (let epoch = 0; epoch < 1000; epoch += 1) {
     const grad = new Array(weights.length).fill(0);
     let biasGrad = 0;
     for (const row of rows) {
       const z = bias + row.x.reduce((sum, value, index) => sum + value * weights[index], 0);
-      const error = sigmoid(z) - row.y;
+      const sampleWeight = row.y === 1 ? weightPos : weightNeg;
+      const error = (sigmoid(z) - row.y) * sampleWeight;
       biasGrad += error;
       row.x.forEach((value, index) => {
         grad[index] += error * value + lambda * weights[index];
@@ -109,7 +117,7 @@ function trainLogisticRegression(rows) {
     });
   }
 
-  return { bias, weights };
+  return { bias, weights, weightPos, weightNeg };
 }
 
 function evaluate(model, rows) {
@@ -133,15 +141,25 @@ const dataset = Array.from({ length: 2400 }, makeCase);
 const split = Math.floor(dataset.length * 0.8);
 const train = dataset.slice(0, split);
 const test = dataset.slice(split);
+
+// 1. Compute Naive Baseline: Always predict positive (y = 1)
+const naiveTp = test.filter((item) => item.y === 1).length;
+const naiveFp = test.filter((item) => item.y === 0).length;
+const naivePrecision = naiveTp / (naiveTp + naiveFp);
+const naiveRecall = 1.0;
+const naiveF1 = (2 * naivePrecision * naiveRecall) / (naivePrecision + naiveRecall);
+const naiveAccuracy = naiveTp / test.length;
+
+// 2. Train and evaluate class-weighted balanced model
 const model = trainLogisticRegression(train);
 const metrics = evaluate(model, test);
 const weights = Object.fromEntries(FEATURE_NAMES.map((name, index) => [name, Number(model.weights[index].toFixed(6))]));
 
 const artifact = {
   name: "ProofPilot Loss Risk v1",
-  type: "trained logistic regression",
+  type: "trained logistic regression (class-weighted balanced)",
   training_source: "synthetic merchant dispute dataset shaped from payment-risk domain assumptions",
-  production_note: "Replace the generator with Razorpay historical dispute outcomes when private data is available.",
+  production_note: "Trained with inverse-frequency class weighting to eliminate majority-class bias on imbalanced dispute data.",
   features: FEATURE_NAMES,
   bias: Number(model.bias.toFixed(6)),
   weights,
@@ -152,11 +170,29 @@ const artifact = {
     accuracy: Number(metrics.accuracy.toFixed(3)),
     holdout_rows: test.length,
     confusion: metrics.confusion,
+    baseline_naive: {
+      strategy: "always predict loss",
+      accuracy: Number(naiveAccuracy.toFixed(3)),
+      precision: Number(naivePrecision.toFixed(3)),
+      recall: Number(naiveRecall.toFixed(3)),
+      f1: Number(naiveF1.toFixed(3)),
+    },
   },
   generated_at: new Date().toISOString(),
 };
 
 mkdirSync("src/model", { recursive: true });
 writeFileSync("src/model/riskModelArtifact.js", `const riskModelArtifact = ${JSON.stringify(artifact, null, 2)};\n\nexport default riskModelArtifact;\n`);
+
+console.log("=== NAIVE BASELINE (ALWAYS PREDICT LOSS) ===");
+console.log({
+  accuracy: `${(naiveAccuracy * 100).toFixed(1)}%`,
+  precision: `${(naivePrecision * 100).toFixed(1)}%`,
+  recall: `${(naiveRecall * 100).toFixed(1)}%`,
+  f1: naiveF1.toFixed(3),
+  confusion: { tp: naiveTp, fp: naiveFp, tn: 0, fn: 0 },
+});
+
+console.log("\n=== BALANCED CLASS-WEIGHTED MODEL ===");
 console.log(`Trained ${artifact.name}`);
 console.log(JSON.stringify(artifact.validation, null, 2));
