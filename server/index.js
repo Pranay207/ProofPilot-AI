@@ -211,7 +211,8 @@ app.use("/api", async (req, _res, next) => {
     url.startsWith("/api/reliability") ||
     url.startsWith("/api/evaluation") ||
     url.startsWith("/api/health") ||
-    url.startsWith("/api/webhooks");
+    url.startsWith("/api/webhooks") ||
+    (req.method === "GET" && url.startsWith("/api/cases"));
 
   if (isPublicRoute) {
     try {
@@ -1359,6 +1360,22 @@ app.get("/api/cases", async (req, res, next) => {
       });
     }
     res.json(rows.map(toFrontendCase));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/cases/:id", async (req, res, next) => {
+  try {
+    const db = await getPrisma();
+    if (!db) {
+      const found = localCases.find((item) => item.id === req.params.id || item.case_id === req.params.id);
+      if (!found) return res.status(404).json({ error: "Case not found" });
+      return res.json(found);
+    }
+    const row = await getCaseByParam(db, req.params.id, req.merchant?.id);
+    if (!row) return res.status(404).json({ error: "Case not found" });
+    res.json(toFrontendCase(row));
   } catch (error) {
     next(error);
   }
